@@ -1,0 +1,16 @@
+{
+    "manifest_version": 3,
+    "name": "Tabs Collections",
+    "version": "0.1",
+
+    "action": {
+        "default_title": "Tabs Collections",
+        "default_popup": "./pages/popup.html"
+    },
+
+    "permissions": [
+        "notifications",
+        "storage",
+        "tabs"
+    ]
+}
