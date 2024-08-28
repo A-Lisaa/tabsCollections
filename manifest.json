@@ -4,13 +4,18 @@
     "version": "0.1",
 
     "action": {
-        "default_title": "Tabs Collections",
-        "default_popup": "./pages/popup.html"
+        "default_title": "Tabs Collections"
     },
 
     "permissions": [
         "notifications",
         "storage",
-        "tabs"
-    ]
+        "tabs",
+        "menus"
+    ],
+
+    "background": {
+        "scripts": ["./scripts/background.js"],
+        "type": "module"
+    }
 }

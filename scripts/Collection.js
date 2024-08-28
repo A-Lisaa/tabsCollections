@@ -4,29 +4,30 @@ import { Tab } from "./Tab.js";
 import { openDB } from "./db.js";
 
 export class Collection {
-    constructor(title, tabs = [new Tab("foo"), new Tab("bar"), new Tab("baz")]) {
+    constructor(title, tabs = []) {
         this.title = title;
         this.tabs = tabs;
     }
 
-    save() {
-        let db = openDB();
-        db.collections.put(this.toObject());
+    async save() {
+        let db = await openDB();
+        db.collections.put(await this.toObject(db));
     }
 
-    static load(name) {
-        let db = openDB();
-        return db.collections.get(name).then((collection) => Collection.fromObject(collection));
+    static async load(name) {
+        let db = await openDB();
+        let object = await db.collections.get(name)
+        return await Collection.fromObject(object, db);
     }
 
-    toObject() {
+    async toObject(db) {
         return {
             title: this.title,
-            tabs: this.tabs.map((tab) => tab.toObject()),
+            tabs: await Promise.all(this.tabs.map(async (tab) => await tab.toObject(db))),
         };
     }
 
-    static fromPrompt() {
+    static async fromPrompt() {
         let title = prompt("Enter the collection title:");
         if (!title) {
             return;
@@ -34,10 +35,10 @@ export class Collection {
         return new Collection(title);
     }
 
-    static fromObject(object) {
+    static async fromObject(object, db) {
         return new Collection(
             object.title,
-            object.tabs.map((tab) => Tab.fromObject(tab)),
+            await Promise.all(object.tabs.map(async (tab) => await Tab.fromObject(tab, db))),
         );
     }
 }

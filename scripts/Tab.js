@@ -1,5 +1,7 @@
 "use strict";
 
+import { md5 } from "./md5.js";
+
 export class Tab {
     constructor(url, title, favicon, creationTime = new Date()) {
         this.url = url;
@@ -8,29 +10,37 @@ export class Tab {
         this.creationTime = creationTime;
     }
 
-    save(db) {
-        let tx = db.transaction(["collections"], "readwrite");
-        let store = tx.objectStore("collections");
-        let request = store.add(this);
-        request.onerror = (event) => {
-            console.error(event);
-        };
-    }
-
-    toObject() {
+    async toObject(db) {
+        let faviconHash;
+        if (this.favicon !== undefined) {
+            faviconHash = md5(this.favicon);
+            await db.favicons.put({ hash: faviconHash, image: this.favicon });
+        }
         return {
             url: this.url,
             title: this.title,
-            favicon: this.favicon,
+            faviconHash: faviconHash,
             creationTime: this.creationTime.getTime(),
         };
     }
 
-    static fromObject(object) {
+    static async fromObject(object, db) {
+        // https://www.google.com/s2/favicons?domain=${DOMAIN}&sz=${SIZE}
+        // use this when can't find the favicon in db
+        let favicon;
+        if (object.faviconHash !== undefined) {
+            let imageObject = await db.favicons.get(object.faviconHash);
+            if (imageObject !== undefined) {
+                favicon = imageObject.image;
+            }
+            else {
+                console.warn(`Favicon with hash ${object.faviconHash} for ${object.url} not found. Database might have been corrupted.`);
+            }
+        }
         return new Tab(
             object.url,
             object.title,
-            object.favicon,
+            favicon,
             new Date(object.creationTime)
         );
     }

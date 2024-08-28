@@ -4,8 +4,8 @@ import { Collection } from "../../scripts/Collection.js";
 import { openDB } from "../../scripts/db.js";
 import { liveQuery } from "../../scripts/dexie.min.js";
 
-(function() {
-    const db = openDB();
+(async function() {
+    const db = await openDB();
 
     const collectionsObservable = liveQuery(
         () => db.collections.toArray()
@@ -15,7 +15,7 @@ import { liveQuery } from "../../scripts/dexie.min.js";
         next: async (result) => {
             document.getElementById("collections").innerHTML = "";
             for (let collectionObject of result) {
-                let collection = Collection.fromObject(collectionObject);
+                let collection = await Collection.fromObject(collectionObject, db);
                 let collectionDiv = await getCollectionElement(collection);
                 document.getElementById("collections").append(collectionDiv);
             }
@@ -40,7 +40,7 @@ import { liveQuery } from "../../scripts/dexie.min.js";
                 </button>
             </div>
             <div id="collection-${collection.title}-subelements" class="collapse show my-1">
-                <table class="table table-sm table-borderless">
+                <table class="table-sort table-arrows table table-sm table-borderless">
                     <thead>
                         <tr>
                             <th scope="col"></th>
@@ -58,10 +58,10 @@ import { liveQuery } from "../../scripts/dexie.min.js";
                                 </td>
                                 <td><img src="${tab.favicon ?? ''}" style="width: 16px; height: 16px;" /></td>
                                 <td>${tab.title ?? 'No title'}</td>
-                                <td>${tab.url}</td>
+                                <td><a href='${tab.url}'>${tab.url}</a></td>
                                 <td>${tab.creationTime.toLocaleString()}</td>
                             </tr>
-                        `)}
+                        `).join("")}
                     </tbody>
                 </table>
             </div>
@@ -78,10 +78,11 @@ import { liveQuery } from "../../scripts/dexie.min.js";
             element.addEventListener("click", async (event) => {
                 let id = event.target.closest("div").id;
                 let collectionTitle = id.slice(id.indexOf("-") + 1, id.lastIndexOf("-"));
+                // can't use rowIndex as rows can be sorted
                 let index = event.target.closest("tr").rowIndex - 1;
                 let collection = await Collection.load(collectionTitle);
                 collection.tabs.splice(index, 1);
-                collection.save();
+                await collection.save();
             });
         }
         return div;
@@ -89,7 +90,7 @@ import { liveQuery } from "../../scripts/dexie.min.js";
 
     async function createCollection() {
         let collection = Collection.fromPrompt();
-        collection.save();
+        await collection.save();
         //updateCollections();
     }
 
@@ -98,7 +99,6 @@ import { liveQuery } from "../../scripts/dexie.min.js";
     }
 
     async function main() {
-        await showCollections();
         await addHandlers();
     }
 

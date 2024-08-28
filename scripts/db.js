@@ -3,13 +3,14 @@
 import { Collection } from "./Collection.js";
 import { Dexie } from "./dexie.min.js";
 
-export function openDB() {
+export async function openDB() {
     const DBNAME = "tabsCollections";
 
     let db = new Dexie(DBNAME);
 
     db.version(1).stores({
-        collections: "&title"
+        collections: "&title",
+        favicons: "&hash"
     });
 
     db.on("populate", () => {
