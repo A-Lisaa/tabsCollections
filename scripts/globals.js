@@ -2,20 +2,26 @@
 
 import { Collection } from "./Collection.js";
 import { Dexie } from "./dexie.min.js";
+import { Settings } from "./settings.js";
 
 export async function openDB() {
     const DBNAME = "tabsCollections";
 
-    let db = new Dexie(DBNAME);
+    const db = new Dexie(DBNAME);
 
     db.version(1).stores({
-        collections: "&title",
+        collections: "++id, &title",
+        tabs: "++id, collectionId",
         favicons: "&hash"
     });
 
     db.on("populate", () => {
-        db.collections.add(new Collection("default"));
+        Collection.create("default");
     });
 
     return db;
 }
+
+export const settings = Settings.load();
+
+export const db = await openDB();

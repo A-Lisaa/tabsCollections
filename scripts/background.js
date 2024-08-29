@@ -1,6 +1,5 @@
 "use strict";
 
-import { Collection } from "./Collection.js";
 import { Tab } from "./Tab.js";
 
 browser.runtime.onInstalled.addListener(() => {
@@ -23,11 +22,11 @@ browser.runtime.onInstalled.addListener(() => {
 });
 
 browser.action.onClicked.addListener(async () => {
-    let collection = await Collection.load("default");
-    let selectedTabs = await browser.tabs.query({ highlighted: true, currentWindow: true });
-    for (let tab of selectedTabs) {
-        let t = new Tab(tab.url, tab.title, tab.favIconUrl);
-        collection.tabs.push(t);
+    // for now assume we only want default and its id is 1
+    const collectionTitle = "default";
+    const collectionId = 1;
+    const selectedTabs = await browser.tabs.query({ highlighted: true, currentWindow: true });
+    for (const tab of selectedTabs) {
+        Tab.create(collectionId, tab.url, tab.title, tab.favIconUrl)
     }
-    await collection.save();
 });
