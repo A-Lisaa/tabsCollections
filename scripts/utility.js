@@ -12,6 +12,20 @@ export function arrayDelete(array, ...values) {
     return array;
 }
 
+export async function regexStability(regex, string) {
+    let matchesCount = 0;
+    for (let i = 0; i < string.length; i++) {
+        let substring = string.slice(0, i) + string.slice(i + 1, string.length);
+        matchesCount += regex.test(substring);
+    }
+    return matchesCount;
+}
+regexStability = funcPerformance(regexStability);
+
+export async function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
+}
+
 export function createCallStack() {
     const stack = [];
     for (const line of (new Error()).stack.split("\n").slice(1, -2)) {
@@ -29,7 +43,7 @@ export function createCallStack() {
 // while performanceEnabled should be taken from global settings, global settings may not have been initialized by the time when the function is called
 export function funcPerformance(func, funcName = func.name, thisArg = undefined, performanceEnabled = settings.performanceEnabled) {
     if (!performanceEnabled)
-        return;
+        return func;
     function inner(...rest) {
         const caller = createCallStack()[1];
         const t0 = performance.now();

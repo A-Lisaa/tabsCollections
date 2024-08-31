@@ -11,13 +11,36 @@
 </head>
 <body>
     <nav class="navbar" style="background-color: var(--bs-secondary-bg);">
-        <div class="container d-flex justify-content-evenly">
+        <div class="container d-flex justify-content-center">
             <a class="navbar-brand" href="#">Tabs Collections</a>
+            <button id="createCollection" class="btn btn-outline-primary rounded-0" type="button" data-bs-toggle="modal" data-bs-target="#collectionModal">Create collection</button>
         </div>
     </nav>
 
     <div class="container-fluid py-2">
-        <button id="createCollection" class="btn btn-primary mb-2" type="button">Create collection</button>
+        <div class="modal fade" id="collectionModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-body">
+                        <form>
+                            <div class="mb-3">
+                                <label for="collectionTitle" class="col-form-label">Title:</label>
+                                <input type="text" class="form-control" id="collectionModalTitle" maxlength="64">
+                            </div>
+                            <div class="mb-3">
+                                <label for="collectionFilters" class="col-form-label">Filters (split with new line; encase regex with / (ex.: /.+/)):</label>
+                                <textarea class="form-control" id="collectionModalFilters"></textarea>
+                            </div>
+                        </form>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                        <button id="collectionModalSaveButton" type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Save</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="collections">
         </div>
     </div>

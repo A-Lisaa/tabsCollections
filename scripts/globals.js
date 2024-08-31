@@ -10,13 +10,13 @@ export async function openDB() {
     const db = new Dexie(DBNAME);
 
     db.version(1).stores({
-        collections: "++id, &title",
+        collections: "++id, &filters",
         tabs: "++id, collectionId",
         favicons: "&hash"
     });
 
     db.on("populate", () => {
-        Collection.create("default");
+        Collection.create("default", ["/.+/"]);
     });
 
     return db;

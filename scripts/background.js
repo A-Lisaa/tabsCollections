@@ -1,6 +1,8 @@
 "use strict";
 
+import { Collection } from "./Collection.js";
 import { Tab } from "./Tab.js";
+import { regexStability } from "./utility.js";
 
 browser.runtime.onInstalled.addListener(() => {
     browser.menus.create({
@@ -22,11 +24,32 @@ browser.runtime.onInstalled.addListener(() => {
 });
 
 browser.action.onClicked.addListener(async () => {
-    // for now assume we only want default and its id is 1
-    const collectionTitle = "default";
-    const collectionId = 1;
+    const collections = await Collection.getAll();
     const selectedTabs = await browser.tabs.query({ highlighted: true, currentWindow: true });
     for (const tab of selectedTabs) {
-        Tab.create(collectionId, tab.url, tab.title, tab.favIconUrl)
+        const mostSpecificCollections = [];
+        let mostSpecicicMatchesCount = Infinity;
+        for (const collection of collections) {
+            for (const filter of collection.filters) {
+                let regexMatches = await regexStability(filter, tab.url);
+                if (regexMatches > 0) {
+                    if (regexMatches < mostSpecicicMatchesCount) {
+                        mostSpecificCollections[0] = collection;
+                    }
+                    else if (regexMatches === mostSpecicicMatchesCount) {
+                        mostSpecificCollections.push(collection);
+                    }
+                    mostSpecicicMatchesCount = regexMatches;
+                    break;
+                }
+            }
+        }
+        if (mostSpecificCollections.length === 0)
+            console.warn("No matches found");
+        else if (mostSpecificCollections.length > 1)
+            console.warn(`Multiple matches found: ${mostSpecificCollections.map(c => c.filters)}`);
+        else {
+            await Tab.create(mostSpecificCollections[0].id, tab.url, tab.title, tab.favIconUrl);
+        }
     }
 });

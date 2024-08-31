@@ -4,28 +4,31 @@ import { liveQuery } from "../../scripts/dexie.min.js";
 import { db } from "./globals.js";
 import { Settings } from "./settings.js";
 import { Tab } from "./Tab.js";
-import { classPerformance, instancePerformance } from "./utility.js";
+import { classPerformance, escapeRegExp, instancePerformance } from "./utility.js";
 
 export class Collection {
-    constructor(id, title, tabs = []) {
+    constructor(id, title, filters, tabs = []) {
         this.id = id;
         this.title = title;
+        this.filters = filters;
         this.tabs = tabs;
 
         instancePerformance(this, this.title);
     }
 
-    static async create(title) {
-        const id = await db.collections.add({title: title});
-        return new Collection(id, title);
+    static async create(title, filters) {
+        const id = await db.collections.add({title: title, filters: filters});
+        return new Collection(id, title, filters);
     }
 
     static async fromPrompt() {
         const title = prompt("Enter the collection title:");
-        if (!title) {
+        if (!title)
             return;
-        }
-        return Collection.create(title);
+        const filters = prompt("Enter the collection filters:");
+        if (!filters)
+            return;
+        return Collection.create(title, [filters]);
     }
 
     static async getFavicons() {
@@ -42,11 +45,24 @@ export class Collection {
         return Promise.all(tabsObjects.map((tabObject) => Tab.fromObject(tabObject, favicons)));
     }
 
+    static async getAll() {
+        return Promise.all((await db.collections.toArray()).map((collectionObject) => Collection.fromObject(collectionObject)));
+    }
+
     static async fromObject(object) {
         const tabs = await Collection.getTabs(object.id);
+        const filters = await Promise.all(
+            object.filters.map(async (filter) => {
+                if (filter.startsWith("/") && filter.endsWith("/")) {
+                    return new RegExp(filter.slice(1, -1));
+                }
+                return new RegExp(await escapeRegExp(filter));
+            })
+        );
         return new Collection(
             object.id,
             object.title,
+            filters,
             tabs
         );
     }
@@ -65,14 +81,8 @@ export class Collection {
         );
     }
 
-    async toObject() {
-        return {
-            title: this.title
-        };
-    }
-
-    async save() {
-        db.collections.put(await this.toObject());
+    async delete() {
+        db.collections.delete(this.id);
     }
 
     static {

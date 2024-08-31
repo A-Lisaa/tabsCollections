@@ -2,6 +2,7 @@
 
 import { Collection } from "../../scripts/Collection.js";
 import { Tab } from "../../scripts/Tab.js";
+import { liveQuery } from "../../scripts/dexie.min.js";
 import { db } from "../../scripts/globals.js";
 import { funcPerformance } from "../../scripts/utility.js";
 
@@ -11,16 +12,54 @@ import { funcPerformance } from "../../scripts/utility.js";
         div.classList.add("d-flex");
         div.innerHTML = `
             <button
-                class="btn btn-outline-secondary my-auto flex-fill"
-                style="text-align: left; border-radius: 0px;"
+                class="btn btn-outline-secondary rounded-0 text-start my-auto flex-fill"
                 type="button"
                 data-bs-toggle="collapse"
                 data-bs-target="#collection-${collection.id}-subelements"
                 aria-expanded="true"
                 aria-controls="collection-${collection.id}-subelements"
             />
+            <button
+                class="btn btn-outline-danger rounded-0 ms-1"
+                type="button"
+                data-bs-toggle="popover"
+                data-bs-placement="bottom"
+                data-bs-html="true"
+                data-bs-trigger="focus"
+                data-bs-title="Are you sure?"
+                data-bs-content="
+                    <a class='btn btn-outline-danger rounded-0' type='button'>Yes</a>
+                    <a class='btn btn-outline-primary rounded-0' type='button'>No</a>
+                "
+            >
+                Delete
+            </button>
+            <button
+                class="btn btn-outline-primary rounded-0 ms-1"
+                type="button"
+                data-bs-toggle="modal"
+                data-bs-target="#collectionModal"
+            >
+                Edit
+            </button>
         `;
-        div.querySelector("button").textContent = `${collection.title} | ${collection.tabs.length} tab(s)`;
+        const [collapseButton, deleteButton, editButton] = div.querySelectorAll("button");
+        collapseButton.textContent = `${collection.title} | ${collection.tabs.length} tab(s)`;
+
+        new bootstrap.Popover(deleteButton);
+        deleteButton.addEventListener("shown.bs.popover", async (event) => {
+            // popovers are very unreliable, need a way to always get the one that opened
+            const popover = document.getElementById(event.target.attributes["aria-describedby"].value);
+            const [deleteButtonYes, deleteButtonNo] = popover.querySelectorAll("a");
+            deleteButtonYes.addEventListener("click", async () => {
+                await collection.delete();
+                deleteButton.click();
+            });
+            deleteButtonNo.addEventListener("click", () => { deleteButton.click() });
+        });
+
+        editButton.addEventListener("click", () => {});
+
         return div;
     }
     getCollectionButton = funcPerformance(getCollectionButton);
@@ -32,30 +71,49 @@ import { funcPerformance } from "../../scripts/utility.js";
             tr.setAttribute('tab-id', tab.id);
 
             const closeBtn = document.createElement("td");
+            closeBtn.style = "padding: .1rem .1rem;"
             const btn = document.createElement("button");
             btn.type = "button";
-            btn.classList.add("btn-close", "align-middle", "invisible", tab.id);
+            btn.classList.add("btn-close", "align-middle", "invisible");
             btn.addEventListener("click", async () => {
-                await db.tabs.delete(tab.id);
+                await tab.delete();
             });
             closeBtn.append(btn);
 
             const favicon = document.createElement("td");
+            favicon.style = "padding: .1rem .1rem;"
             const image = document.createElement("img");
             image.src = tab.favicon ?? '';
             image.style = "width: 16px; height: 16px;";
             favicon.append(image);
 
             const title = document.createElement("td");
-            title.textContent = tab.title ?? "No title";
+            title.classList.add("text-truncate");
+            title.style = "padding: .1rem .1rem;"
+            const titleText = document.createElement("a");
+            titleText.classList.add("link-light", "link-underline", "link-offset-2", "link-offset-3-hover", "link-underline-opacity-0", "link-underline-opacity-75-hover");
+            titleText.href = tab.url;
+            titleText.textContent = tab.title ?? "No title";
+            titleText.setAttribute("data-bs-toggle", "tooltip");
+            titleText.setAttribute("data-bs-title", titleText.textContent);
+            titleText.setAttribute("data-bs-delay", "500");
+            new bootstrap.Tooltip(titleText);
+            title.append(titleText);
 
             const url = document.createElement("td");
+            url.classList.add("text-truncate");
+            url.style = "padding: .1rem .1rem;"
             const a = document.createElement("a");
             a.href = tab.url;
-            a.textContent = tab.url;
+            a.textContent = decodeURI(tab.url);
+            a.setAttribute("data-bs-toggle", "tooltip");
+            a.setAttribute("data-bs-title", a.textContent);
+            a.setAttribute("data-bs-delay", "500");
+            new bootstrap.Tooltip(a);
             url.append(a);
 
             const creationTime = document.createElement("td");
+            creationTime.style = "padding: .1rem .1rem;"
             creationTime.textContent = tab.creationTime.toLocaleString();
 
             tr.append(closeBtn, favicon, title, url, creationTime);
@@ -74,18 +132,20 @@ import { funcPerformance } from "../../scripts/utility.js";
     getCollectionRows = funcPerformance(getCollectionRows);
 
     async function getCollectionTable(collection) {
+        // let's just hope that font-size doesn't get changed
+        const fontSize = 8;
         const div = document.createElement("div");
         div.id = `collection-${collection.id}-subelements`;
         div.classList.add("collapse", "show", "my-1");
         div.innerHTML = `
-            <table class="table-sort table-arrows table table-sm table-borderless">
+            <table class="table-sort table-arrows table table-sm table-borderless" style="table-layout: fixed;">
                 <thead>
                     <tr>
-                        <th scope="col"></th>
-                        <th scope="col"></th>
+                        <th scope="col" style="width: 32px;"></th>
+                        <th scope="col" style="width: 24px;"></th>
                         <th scope="col">Title</th>
                         <th scope="col">URL</th>
-                        <th scope="col">Creation Time</th>
+                        <th scope="col" style="width: ${new Date().toLocaleString().length * fontSize}px;">Creation Time</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -106,40 +166,56 @@ import { funcPerformance } from "../../scripts/utility.js";
     }
     getCollectionElement = funcPerformance(getCollectionElement);
 
+    async function showCollectionTabs(collectionId, tabs) {
+        const div = document.querySelector(`div[collection-id="${collectionId}"]`);
+        const collapser = div.querySelector("button");
+        collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${tabs.length} tab(s)`;
+
+        const tbody = div.querySelector("tbody");
+        tbody.innerHTML = "";
+        tbody.append(...await getCollectionRows(tabs));
+    }
+    showCollectionTabs = funcPerformance(showCollectionTabs);
+
     const observables = new Map();
 
-    async function showCollections() {
-        const ids = await db.collections.toCollection().primaryKeys();
-        for (const id of ids) {
-            const collection = await Collection.fromDB(id);
-            const observable = await collection.getObservable();
-            observable.subscribe({
-                next: funcPerformance(
-                    async (result) => {
-                        if (result.length === 0)
-                            return;
-                        const favicons = await Collection.getFavicons();
-                        const tabs = await Promise.all(result.map((tab) => Tab.fromObject(tab, favicons)));
-                        const id = tabs[0].collectionId;
-                        const div = document.querySelector(`div[collection-id="${id}"]`);
-                        const collapser = div.querySelector("button");
-                        collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${tabs.length} tab(s)`;
-                        const tbody = div.querySelector("tbody");
-                        tbody.innerHTML = "";
-                        tbody.append(...await getCollectionRows(tabs));
-                    },
-                    `Collection ${id} observer`
-                )
-            });
-            observables.set(id, observable);
-            const collectionDiv = await getCollectionElement(collection);
-            document.getElementById("collections").append(collectionDiv);
-        }
+    async function showCollection(collection) {
+        const observable = await collection.getObservable();
+        observable.subscribe({
+            next: funcPerformance(
+                async (result) => {
+                    const favicons = await Collection.getFavicons();
+                    const tabs = await Promise.all(result.map((tab) => Tab.fromObject(tab, favicons)));
+                    await showCollectionTabs(collection.id, tabs);
+                },
+                `Collection(${collection.title}) observer`
+            )
+        });
+        observables.set(collection.id, observable);
+        const collectionDiv = await getCollectionElement(collection);
+        document.getElementById("collections").append(collectionDiv);
     }
-    showCollections = funcPerformance(showCollections);
+    showCollection = funcPerformance(showCollection);
+
+    const collectionsObservable = liveQuery(
+        () => db.collections.toArray()
+    );
+
+    collectionsObservable.subscribe(async (collections) => {
+        observables.clear();
+        document.getElementById("collections").innerHTML = "";
+        for (const collectionObject of collections) {
+            const collection = await Collection.fromObject(collectionObject);
+            showCollection(collection);
+        }
+    });
 
     async function createCollection() {
-        const collection = Collection.fromPrompt();
+        document.getElementById("collectionModalSaveButton").addEventListener("click", () => {
+            const title = document.getElementById("collectionModalTitle").value.trim();
+            const filters = document.getElementById("collectionModalFilters").value.trim().split("\n");
+            Collection.create(title, filters);
+        });
     }
 
     async function addHandlers() {
@@ -148,7 +224,6 @@ import { funcPerformance } from "../../scripts/utility.js";
 
     async function main() {
         await addHandlers();
-        await showCollections();
     }
 
     document.addEventListener("DOMContentLoaded", main);

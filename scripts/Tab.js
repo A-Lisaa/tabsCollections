@@ -66,6 +66,10 @@ export class Tab {
         };
     }
 
+    async delete() {
+        db.tabs.delete(this.id);
+    }
+
     static {
         Tab["create"] = funcPerformance(Tab["create"], "Tab.create");
     }
