@@ -1,16 +1,8 @@
 "use strict";
 
+import { Favicons } from "./Favicons.js";
 import { db } from "./globals.js";
-import { md5 } from "./md5.min.js";
 import { funcPerformance } from "./utility.js";
-
-async function storeFavicon(favicon) {
-    let faviconHash = md5(favicon);
-    await db.favicons.put({ hash: faviconHash, image: favicon });
-    return faviconHash;
-}
-
-storeFavicon = funcPerformance(storeFavicon);
 
 export class Tab {
     constructor(id, collectionId, url, title, favicon, creationTime = new Date()) {
@@ -24,10 +16,10 @@ export class Tab {
         //instancePerformance(this, this.title);
     }
 
-    static async create(collectionId, url, title, favicon, creationTime = new Date()) {
+    static async create(collectionId, url, title, favicon, creationTime = new Date(), returnNeeded = false) {
         let faviconHash;
         if (favicon !== undefined) {
-            faviconHash = await storeFavicon(favicon);
+            faviconHash = await Favicons.store(favicon);
         }
         const id = await db.tabs.add({
             collectionId: collectionId,
@@ -36,7 +28,27 @@ export class Tab {
             faviconHash: faviconHash,
             creationTime: creationTime.getTime(),
         });
+        if (!returnNeeded)
+            return;
         return new Tab(id, collectionId, title, favicon, creationTime);
+    }
+
+    static async bulkCreate(tabs, returnNeeded = false) {
+        const prepared = await Promise.all(tabs.map(async (tab) => {
+            return {
+                collectionId: tab.collectionId,
+                url: tab.url,
+                title: tab.title,
+                faviconHash: (tab.favicon !== undefined) ? await Favicons.store(tab.favicon) : undefined,
+                creationTime: (tab.creationTime ?? new Date()).getTime(),
+            }
+        }));
+        if (!returnNeeded) {
+            db.tabs.bulkAdd(prepared);
+            return;
+        }
+        const ids = await db.tabs.bulkAdd(prepared, undefined, { allKeys: true });
+        return prepared.map((tab, index) => new Tab(ids[index], tab.collectionId, tab.url, tab.title, tabs[index].favicon, tab.creationTime));
     }
 
     static async fromObject(object, favicons) {
@@ -55,7 +67,7 @@ export class Tab {
     async toObject() {
         let faviconHash;
         if (this.favicon !== undefined) {
-            faviconHash = await storeFavicon(this.favicon);
+            faviconHash = await Favicons.store(this.favicon);
         }
         return {
             collectionId: this.collectionId,
@@ -67,10 +79,18 @@ export class Tab {
     }
 
     async delete() {
-        db.tabs.delete(this.id);
+        await db.tabs.delete(this.id);
+        Favicons.cleanup();
+    }
+
+    static async deleteBulk(tabs) {
+        await Promise.all(tabs.map((tab) => tab.delete()));
+        Favicons.cleanup();
     }
 
     static {
         Tab["create"] = funcPerformance(Tab["create"], "Tab.create");
+        Tab["bulkCreate"] = funcPerformance(Tab["bulkCreate"], "Tab.bulkCreate");
+        Tab["faviconsCleanup"] = funcPerformance(Tab["faviconsCleanup"], "Tab.faviconsCleanup");
     }
 }

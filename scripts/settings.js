@@ -2,10 +2,11 @@
 
 
 export class Settings {
-    constructor(debugEnabled = true, performanceEnabled = true, fetchUndefinedFavicons = true) {
+    constructor(debugEnabled = true, performanceEnabled = true, fetchUndefinedFavicons = true, cacheFavicons = true) {
         this.debugEnabled = debugEnabled;
         this.performanceEnabled = performanceEnabled;
         this.fetchUndefinedFavicons = fetchUndefinedFavicons;
+        this.cacheFavicons = cacheFavicons;
     }
 
     async save() {

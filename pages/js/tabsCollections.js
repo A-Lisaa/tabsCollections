@@ -1,54 +1,52 @@
 "use strict";
 
 import { Collection } from "../../scripts/Collection.js";
+import { Favicons } from "../../scripts/Favicons.js";
 import { Tab } from "../../scripts/Tab.js";
 import { liveQuery } from "../../scripts/dexie.min.js";
 import { db } from "../../scripts/globals.js";
 import { funcPerformance } from "../../scripts/utility.js";
 
 (async function() {
-    async function getCollectionButton(collection) {
-        const div = document.createElement("div");
-        div.classList.add("d-flex");
-        div.innerHTML = `
-            <button
-                class="btn btn-outline-secondary rounded-0 text-start my-auto flex-fill"
-                type="button"
-                data-bs-toggle="collapse"
-                data-bs-target="#collection-${collection.id}-subelements"
-                aria-expanded="true"
-                aria-controls="collection-${collection.id}-subelements"
-            />
-            <button
-                class="btn btn-outline-danger rounded-0 ms-1"
-                type="button"
-                data-bs-toggle="popover"
-                data-bs-placement="bottom"
-                data-bs-html="true"
-                data-bs-trigger="focus"
-                data-bs-title="Are you sure?"
-                data-bs-content="
-                    <a class='btn btn-outline-danger rounded-0' type='button'>Yes</a>
-                    <a class='btn btn-outline-primary rounded-0' type='button'>No</a>
-                "
-            >
-                Delete
-            </button>
-            <button
-                class="btn btn-outline-primary rounded-0 ms-1"
-                type="button"
-                data-bs-toggle="modal"
-                data-bs-target="#collectionModal"
-            >
-                Edit
-            </button>
-        `;
-        const [collapseButton, deleteButton, editButton] = div.querySelectorAll("button");
+    async function getCollectionElementTemplate() {
+        // for now assume font size is always the same
+        const fontSize = 8;
+        const collectionElementTemplate = document.getElementById("collectionTemplate").cloneNode(true);
+        collectionElementTemplate.removeAttribute("id");
+        collectionElementTemplate.removeAttribute("aria-hidden");
+        collectionElementTemplate.classList.remove("d-none");
+        // width of creation time column
+        collectionElementTemplate.querySelectorAll("th")[4].style = `width: ${new Date().toLocaleString().length * fontSize}px;`;
+        return collectionElementTemplate;
+    }
+
+    async function getTabTemplate() {
+        const tabTemplate = document.getElementById("tabTemplate").cloneNode(true);
+        tabTemplate.removeAttribute("id");
+        tabTemplate.removeAttribute("aria-hidden");
+        tabTemplate.classList.remove("d-none");
+        tabTemplate.addEventListener("mouseenter", (event) => {
+            event.target.querySelector(".btn-close").classList.remove("invisible");
+        });
+        tabTemplate.addEventListener("mouseleave", (event) => {
+            event.target.querySelector(".btn-close").classList.add("invisible");
+        });
+        return tabTemplate;
+    }
+
+    const collectionElementTemplate = await getCollectionElementTemplate();
+    const tabTemplate = await getTabTemplate();
+
+    async function setCollectionHeader(collection, { collectionHeader }) {
+        const [collapseButton, deleteButton, editButton] = collectionHeader.children;
+
+        collapseButton.setAttribute("data-bs-target", `#collection-${collection.id}-subelements`);
+        collapseButton.setAttribute("aria-controls", `collection-${collection.id}-subelements`);
         collapseButton.textContent = `${collection.title} | ${collection.tabs.length} tab(s)`;
 
         new bootstrap.Popover(deleteButton);
         deleteButton.addEventListener("shown.bs.popover", async (event) => {
-            // popovers are very unreliable, need a way to always get the one that opened
+            // TODO: popovers are very unreliable, need a way to always get the one that opened
             const popover = document.getElementById(event.target.attributes["aria-describedby"].value);
             const [deleteButtonYes, deleteButtonNo] = popover.querySelectorAll("a");
             deleteButtonYes.addEventListener("click", async () => {
@@ -59,121 +57,73 @@ import { funcPerformance } from "../../scripts/utility.js";
         });
 
         editButton.addEventListener("click", () => {});
-
-        return div;
     }
-    getCollectionButton = funcPerformance(getCollectionButton);
+    setCollectionHeader = funcPerformance(setCollectionHeader);
 
-    async function getCollectionRows(tabs) {
-        const rows = [];
-        for (const tab of tabs) {
-            const tr = document.createElement('tr');
-            tr.setAttribute('tab-id', tab.id);
+    async function getCollectionRow(tab) {
+        const row = tabTemplate.cloneNode(true);
+        row.setAttribute("tab-id", tab.id);
+        const [closeButton, favicon, title, url, creationTime] = row.children;
 
-            const closeBtn = document.createElement("td");
-            closeBtn.style = "padding: .1rem .1rem;"
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.classList.add("btn-close", "align-middle", "invisible");
-            btn.addEventListener("click", async () => {
-                await tab.delete();
-            });
-            closeBtn.append(btn);
+        closeButton.children[0].addEventListener("click", async () => {
+            await tab.delete();
+        });
 
-            const favicon = document.createElement("td");
-            favicon.style = "padding: .1rem .1rem;"
-            const image = document.createElement("img");
-            image.src = tab.favicon ?? '';
-            image.style = "width: 16px; height: 16px;";
-            favicon.append(image);
+        favicon.children[0].src = tab.favicon ?? '';
 
-            const title = document.createElement("td");
-            title.classList.add("text-truncate");
-            title.style = "padding: .1rem .1rem;"
-            const titleText = document.createElement("a");
-            titleText.classList.add("link-light", "link-underline", "link-offset-2", "link-offset-3-hover", "link-underline-opacity-0", "link-underline-opacity-75-hover");
-            titleText.href = tab.url;
-            titleText.textContent = tab.title ?? "No title";
-            titleText.setAttribute("data-bs-toggle", "tooltip");
-            titleText.setAttribute("data-bs-title", titleText.textContent);
-            titleText.setAttribute("data-bs-delay", "500");
-            new bootstrap.Tooltip(titleText);
-            title.append(titleText);
+        const titleAnchor = title.children[0];
+        titleAnchor.href = tab.url;
+        titleAnchor.textContent = tab.title ?? "No title";
+        titleAnchor.setAttribute("data-bs-title", titleAnchor.textContent);
+        new bootstrap.Tooltip(titleAnchor);
 
-            const url = document.createElement("td");
-            url.classList.add("text-truncate");
-            url.style = "padding: .1rem .1rem;"
-            const a = document.createElement("a");
-            a.href = tab.url;
-            a.textContent = decodeURI(tab.url);
-            a.setAttribute("data-bs-toggle", "tooltip");
-            a.setAttribute("data-bs-title", a.textContent);
-            a.setAttribute("data-bs-delay", "500");
-            new bootstrap.Tooltip(a);
-            url.append(a);
+        const urlAnchor = url.children[0];
+        urlAnchor.href = tab.url;
+        urlAnchor.textContent = decodeURI(tab.url);
+        urlAnchor.setAttribute("href", tab.url);
+        new bootstrap.Tooltip(urlAnchor);
 
-            const creationTime = document.createElement("td");
-            creationTime.style = "padding: .1rem .1rem;"
-            creationTime.textContent = tab.creationTime.toLocaleString();
+        creationTime.textContent = tab.creationTime.toLocaleString();
 
-            tr.append(closeBtn, favicon, title, url, creationTime);
-
-            tr.addEventListener("mouseenter", (event) => {
-                event.target.querySelector("button").classList.remove("invisible");
-            });
-            tr.addEventListener("mouseleave", (event) => {
-                event.target.querySelector("button").classList.add("invisible");
-            });
-
-            rows.push(tr);
-        }
-        return rows;
+        return row;
     }
-    getCollectionRows = funcPerformance(getCollectionRows);
 
-    async function getCollectionTable(collection) {
-        // let's just hope that font-size doesn't get changed
-        const fontSize = 8;
-        const div = document.createElement("div");
-        div.id = `collection-${collection.id}-subelements`;
-        div.classList.add("collapse", "show", "my-1");
-        div.innerHTML = `
-            <table class="table-sort table-arrows table table-sm table-borderless" style="table-layout: fixed;">
-                <thead>
-                    <tr>
-                        <th scope="col" style="width: 32px;"></th>
-                        <th scope="col" style="width: 24px;"></th>
-                        <th scope="col">Title</th>
-                        <th scope="col">URL</th>
-                        <th scope="col" style="width: ${new Date().toLocaleString().length * fontSize}px;">Creation Time</th>
-                    </tr>
-                </thead>
-                <tbody>
-                </tbody>
-            </table>
-        `;
-        //div.querySelector('tbody').append(...await getCollectionRows(collection.tabs));
-        return div;
+    async function setCollectionTbody(tabs, tbody) {
+        Promise.all(
+            tabs.map(
+                (tab) => getCollectionRow(tab).then((row) => { tbody.append(row); })
+            )
+        );
     }
-    getCollectionTable = funcPerformance(getCollectionTable);
+    setCollectionTbody = funcPerformance(setCollectionTbody);
+
+    async function setCollectionSubelements(collection, { collectionSubelements }) {
+        collectionSubelements.id = `collection-${collection.id}-subelements`;
+        const tbody = collectionSubelements.querySelector("tbody");
+        setCollectionTbody(collection.tabs, tbody);
+    }
+    setCollectionSubelements = funcPerformance(setCollectionSubelements);
 
     async function getCollectionElement(collection) {
-        const div = document.createElement("div");
-        div.classList.add("mb-2");
-        div.setAttribute("collection-id", collection.id);
-        div.append(await getCollectionButton(collection), await getCollectionTable(collection));
-        return div;
+        const collectionElement = collectionElementTemplate.cloneNode(true);
+        collectionElement.setAttribute("collection-id", collection.id);
+
+        const [collectionHeader, collectionSubelements] = collectionElement.children;
+        setCollectionHeader(collection, { collectionHeader: collectionHeader });
+        setCollectionSubelements(collection, { collectionSubelements: collectionSubelements });
+
+        return collectionElement;
     }
     getCollectionElement = funcPerformance(getCollectionElement);
 
     async function showCollectionTabs(collectionId, tabs) {
-        const div = document.querySelector(`div[collection-id="${collectionId}"]`);
+        const div = document.getElementById("collections").querySelector(`div[collection-id="${collectionId}"]`);
         const collapser = div.querySelector("button");
         collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${tabs.length} tab(s)`;
 
         const tbody = div.querySelector("tbody");
         tbody.innerHTML = "";
-        tbody.append(...await getCollectionRows(tabs));
+        setCollectionTbody(tabs, tbody);
     }
     showCollectionTabs = funcPerformance(showCollectionTabs);
 
@@ -184,7 +134,7 @@ import { funcPerformance } from "../../scripts/utility.js";
         observable.subscribe({
             next: funcPerformance(
                 async (result) => {
-                    const favicons = await Collection.getFavicons();
+                    const favicons = await Favicons.getAll();
                     const tabs = await Promise.all(result.map((tab) => Tab.fromObject(tab, favicons)));
                     await showCollectionTabs(collection.id, tabs);
                 },
@@ -201,13 +151,17 @@ import { funcPerformance } from "../../scripts/utility.js";
         () => db.collections.toArray()
     );
 
-    collectionsObservable.subscribe(async (collections) => {
-        observables.clear();
-        document.getElementById("collections").innerHTML = "";
-        for (const collectionObject of collections) {
-            const collection = await Collection.fromObject(collectionObject);
-            showCollection(collection);
-        }
+    collectionsObservable.subscribe({
+        next: funcPerformance(
+            async (collections) => {
+                observables.clear();
+                document.getElementById("collections").innerHTML = "";
+                Promise.all(collections.map(async (collectionObject) => {
+                    const collection = await Collection.fromObject(collectionObject);
+                    showCollection(collection);
+                }));
+            },
+            `collectionsObservable observer`)
     });
 
     async function createCollection() {

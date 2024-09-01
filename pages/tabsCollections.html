@@ -7,9 +7,110 @@
     <link href="./css/bootstrap.min.css" rel="stylesheet">
     <script src="./js/bootstrap.bundle.min.js"></script>
 
+    <link href="./css/tabsCollections.css" rel="stylesheet">
     <script src="./js/tabsCollections.js" type="module" defer></script>
 </head>
 <body>
+    <div class="modal fade" id="collectionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <form>
+                        <div class="mb-3">
+                            <label for="collectionTitle" class="col-form-label">Title:</label>
+                            <input type="text" class="form-control" id="collectionModalTitle" maxlength="64">
+                        </div>
+                        <div class="mb-3">
+                            <label for="collectionFilters" class="col-form-label">Filters (split with new line; encase regex with / (ex.: /.+/)):</label>
+                            <textarea class="form-control" id="collectionModalFilters"></textarea>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input type="checkbox" class="form-check-input" id="collectionModalAllowDuplicates">
+                            <label class="form-check-label" for="collectionModalAllowDuplicates">Allow duplicates</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button id="collectionModalSaveButton" type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="collectionTemplate" class="d-none mb-2" aria-hidden="true">
+        <div class="d-flex">
+            <button
+                class="btn btn-outline-secondary rounded-0 text-start my-auto flex-fill"
+                type="button"
+                data-bs-toggle="collapse"
+                data-bs-target=""
+                aria-expanded="true"
+                aria-controls=""
+            ></button>
+            <button
+                class="btn btn-outline-danger rounded-0 ms-1"
+                type="button"
+                data-bs-toggle="popover"
+                data-bs-placement="bottom"
+                data-bs-html="true"
+                data-bs-trigger="focus"
+                data-bs-title="Are you sure?"
+                data-bs-content="
+                    &lt;a class='btn btn-outline-danger rounded-0' type='button'&gt;Yes&lt;/a&gt;
+                    &lt;a class='btn btn-outline-primary rounded-0' type='button'&gt;No&lt;/a&gt;
+                "
+            >
+                Delete
+            </button>
+            <button
+                class="btn btn-outline-primary rounded-0 ms-1"
+                type="button"
+                data-bs-toggle="modal"
+                data-bs-target="#collectionModal"
+            >
+                Edit
+            </button>
+        </div>
+        <div id="collection-${collection.id}-subelements" class="collapse show my-1">
+            <table class="table-sort table-arrows table table-sm table-borderless" style="table-layout: fixed;">
+                <thead>
+                    <tr>
+                        <th scope="col" style="width: 32px;"></th>
+                        <th scope="col" style="width: 24px;"></th>
+                        <th scope="col">Title</th>
+                        <th scope="col">URL</th>
+                        <th scope="col">Creation Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                     <tr id="tabTemplate" class="tab d-none" aria-hidden="true">
+                        <td>
+                            <button type="button" class="btn-close align-middle invisible"></button>
+                        </td>
+                        <td>
+                            <img style="width: 16px; height: 16px;">
+                        </td>
+                        <td class="text-truncate">
+                            <a
+                                class="link-light link-underline link-offset-2 link-offset-3-hover link-underline-opacity-0 link-underline-opacity-75-hover"
+                                data-bs-toggle="tooltip"
+                                data-bs-delay="500"
+                            ></a>
+                        </td>
+                        <td class="text-truncate">
+                            <a
+                                data-bs-toggle="tooltip"
+                                data-bs-delay="500"
+                            ></a>
+                        </td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <nav class="navbar" style="background-color: var(--bs-secondary-bg);">
         <div class="container d-flex justify-content-center">
             <a class="navbar-brand" href="#">Tabs Collections</a>
@@ -18,29 +119,6 @@
     </nav>
 
     <div class="container-fluid py-2">
-        <div class="modal fade" id="collectionModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog">
-                <div class="modal-content">
-                    <div class="modal-body">
-                        <form>
-                            <div class="mb-3">
-                                <label for="collectionTitle" class="col-form-label">Title:</label>
-                                <input type="text" class="form-control" id="collectionModalTitle" maxlength="64">
-                            </div>
-                            <div class="mb-3">
-                                <label for="collectionFilters" class="col-form-label">Filters (split with new line; encase regex with / (ex.: /.+/)):</label>
-                                <textarea class="form-control" id="collectionModalFilters"></textarea>
-                            </div>
-                        </form>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-                        <button id="collectionModalSaveButton" type="button" class="btn btn-outline-primary" data-bs-dismiss="modal">Save</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <div id="collections">
         </div>
     </div>

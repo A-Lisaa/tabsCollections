@@ -2,6 +2,9 @@
 
 import { settings } from "./globals.js";
 
+// TODO: logger
+// TODO: import/export
+
 export function arrayDelete(array, ...values) {
     for (const value of values) {
         const index = array.indexOf(value);
@@ -12,6 +15,7 @@ export function arrayDelete(array, ...values) {
     return array;
 }
 
+// TODO: move the regex stuff out
 export async function regexStability(regex, string) {
     let matchesCount = 0;
     for (let i = 0; i < string.length; i++) {
@@ -26,6 +30,7 @@ export async function escapeRegExp(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
 }
 
+// TODO: move the performance stuff out
 export function createCallStack() {
     const stack = [];
     for (const line of (new Error()).stack.split("\n").slice(1, -2)) {
@@ -60,6 +65,8 @@ export function classPerformance(cls, performanceEnabled = settings.performanceE
     if (!performanceEnabled)
         return;
     for (const propertyName of arrayDelete(Object.getOwnPropertyNames(cls), "prototype", "length", "name")) {
+        if (!(typeof cls[propertyName] === "function"))
+            continue;
         cls[propertyName] = funcPerformance(cls[propertyName], `${cls.name}.${cls[propertyName].name}`, undefined, performanceEnabled);
     }
 }

@@ -24,8 +24,11 @@ browser.runtime.onInstalled.addListener(() => {
 });
 
 browser.action.onClicked.addListener(async () => {
-    const collections = await Collection.getAll();
-    const selectedTabs = await browser.tabs.query({ highlighted: true, currentWindow: true });
+    const [collections, selectedTabs] = await Promise.all([
+        Collection.getAll(),
+        browser.tabs.query({ highlighted: true, currentWindow: true })
+    ]);
+    const res = [];
     for (const tab of selectedTabs) {
         const mostSpecificCollections = [];
         let mostSpecicicMatchesCount = Infinity;
@@ -49,7 +52,10 @@ browser.action.onClicked.addListener(async () => {
         else if (mostSpecificCollections.length > 1)
             console.warn(`Multiple matches found: ${mostSpecificCollections.map(c => c.filters)}`);
         else {
-            await Tab.create(mostSpecificCollections[0].id, tab.url, tab.title, tab.favIconUrl);
+            // TODO: notification API when added
+            //Tab.create(mostSpecificCollections[0].id, tab.url, tab.title, tab.favIconUrl);
+            res.push({collectionId: mostSpecificCollections[0].id, url: tab.url, title: tab.title, favicon: tab.favIconUrl});
         }
     }
+    Tab.bulkCreate(res);
 });
