@@ -24,12 +24,7 @@ browser.runtime.onInstalled.addListener(() => {
 });
 
 browser.action.onClicked.addListener(async () => {
-    const [collections, selectedTabs] = await Promise.all([
-        Collection.getAll(),
-        browser.tabs.query({ highlighted: true, currentWindow: true })
-    ]);
-    const res = [];
-    for (const tab of selectedTabs) {
+    async function getMostSpecificCollections(tab, collections) {
         const mostSpecificCollections = [];
         let mostSpecicicMatchesCount = Infinity;
         for (const collection of collections) {
@@ -47,14 +42,29 @@ browser.action.onClicked.addListener(async () => {
                 }
             }
         }
+        return mostSpecificCollections;
+    }
+
+    const [collections, selectedTabs, extensionTab] = await Promise.all([
+        Collection.getAll(),
+        browser.tabs.query({ highlighted: true, currentWindow: true }),
+        browser.tabs.query({ url: "moz-extension://07e46114-c3e0-486b-bdb1-8efa7e4e1485/pages/tabsCollections.html" })
+    ]);
+    const res = [];
+    for (const tab of selectedTabs) {
+        const mostSpecificCollections = await getMostSpecificCollections(tab, collections);
         if (mostSpecificCollections.length === 0)
             console.warn("No matches found");
         else if (mostSpecificCollections.length > 1)
             console.warn(`Multiple matches found: ${mostSpecificCollections.map(c => c.filters)}`);
         else {
             // TODO: notification API when added
-            //Tab.create(mostSpecificCollections[0].id, tab.url, tab.title, tab.favIconUrl);
-            res.push({collectionId: mostSpecificCollections[0].id, url: tab.url, title: tab.title, favicon: tab.favIconUrl});
+            res.push({
+                collectionId: mostSpecificCollections[0].id,
+                url: tab.url,
+                title: tab.title,
+                favicon: tab.favIconUrl
+            });
         }
     }
     Tab.bulkCreate(res);

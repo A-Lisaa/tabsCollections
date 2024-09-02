@@ -64,20 +64,6 @@ export class Tab {
         );
     }
 
-    async toObject() {
-        let faviconHash;
-        if (this.favicon !== undefined) {
-            faviconHash = await Favicons.store(this.favicon);
-        }
-        return {
-            collectionId: this.collectionId,
-            url: this.url,
-            title: this.title,
-            faviconHash: faviconHash,
-            creationTime: this.creationTime.getTime(),
-        };
-    }
-
     async delete() {
         await db.tabs.delete(this.id);
         Favicons.cleanup();

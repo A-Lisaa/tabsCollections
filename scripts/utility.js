@@ -1,18 +1,23 @@
 "use strict";
 
+import { ArrayExtensions } from "./extensions.js";
 import { settings } from "./globals.js";
 
 // TODO: logger
 // TODO: import/export
 
-export function arrayDelete(array, ...values) {
-    for (const value of values) {
-        const index = array.indexOf(value);
-        if (index !== -1) {
-            array.splice(index, 1);
-        }
+export function Uint8ArrayComparer(array1, array2) {
+    if (array1.length !== array2.length)
+        return false;
+    for (let i = 0; i < array1.length; i++) {
+        if (array1[i] !== array2[i])
+            return false;
     }
-    return array;
+    return true;
+}
+
+export function arrayBufferComparer(buffer1, buffer2) {
+    return Uint8ArrayComparer(new Uint8Array(buffer1), new Uint8Array(buffer2));
 }
 
 // TODO: move the regex stuff out
@@ -64,7 +69,7 @@ export function funcPerformance(func, funcName = func.name, thisArg = undefined,
 export function classPerformance(cls, performanceEnabled = settings.performanceEnabled) {
     if (!performanceEnabled)
         return;
-    for (const propertyName of arrayDelete(Object.getOwnPropertyNames(cls), "prototype", "length", "name")) {
+    for (const propertyName of ArrayExtensions.deleteValues(Object.getOwnPropertyNames(cls), "prototype", "length", "name")) {
         if (!(typeof cls[propertyName] === "function"))
             continue;
         cls[propertyName] = funcPerformance(cls[propertyName], `${cls.name}.${cls[propertyName].name}`, undefined, performanceEnabled);
@@ -75,7 +80,7 @@ export function instancePerformance(instance, instanceName, performanceEnabled =
     if (!performanceEnabled)
         return;
     const proto = Object.getPrototypeOf(instance);
-    for (const propertyName of arrayDelete(Object.getOwnPropertyNames(proto), "constructor")) {
+    for (const propertyName of ArrayExtensions.deleteValues(Object.getOwnPropertyNames(proto), "constructor")) {
         instance[propertyName] = funcPerformance(proto[propertyName], `${proto.constructor.name}(${instanceName}).${proto[propertyName].name}`, instance, performanceEnabled);
     }
 }

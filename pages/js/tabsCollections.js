@@ -1,10 +1,10 @@
 "use strict";
 
 import { Collection } from "../../scripts/Collection.js";
-import { Favicons } from "../../scripts/Favicons.js";
-import { Tab } from "../../scripts/Tab.js";
 import { liveQuery } from "../../scripts/dexie.min.js";
+import { Favicons } from "../../scripts/Favicons.js";
 import { db } from "../../scripts/globals.js";
+import { Tab } from "../../scripts/Tab.js";
 import { funcPerformance } from "../../scripts/utility.js";
 
 (async function() {
@@ -65,22 +65,33 @@ import { funcPerformance } from "../../scripts/utility.js";
         row.setAttribute("tab-id", tab.id);
         const [closeButton, favicon, title, url, creationTime] = row.children;
 
-        closeButton.children[0].addEventListener("click", async () => {
-            await tab.delete();
-        });
+        closeButton.firstElementChild.addEventListener("click", () => tab.delete());
 
-        favicon.children[0].src = tab.favicon ?? '';
+        if (tab.favicon !== undefined) {
+            if (typeof tab.favicon === "string") {
+                favicon.firstElementChild.src = tab.favicon;
+            }
+            else {
+                // if tab.favicon is Blob
+                const faviconUrl = URL.createObjectURL(tab.favicon);
+                favicon.firstElementChild.src = faviconUrl;
+                URL.revokeObjectURL(faviconUrl);
+            }
+        }
+        else {
+            favicon.firstElementChild.src = "";
+        }
 
-        const titleAnchor = title.children[0];
+        const titleAnchor = title.firstElementChild;
         titleAnchor.href = tab.url;
         titleAnchor.textContent = tab.title ?? "No title";
         titleAnchor.setAttribute("data-bs-title", titleAnchor.textContent);
         new bootstrap.Tooltip(titleAnchor);
 
-        const urlAnchor = url.children[0];
+        const urlAnchor = url.firstElementChild;
         urlAnchor.href = tab.url;
         urlAnchor.textContent = decodeURI(tab.url);
-        urlAnchor.setAttribute("href", tab.url);
+        urlAnchor.setAttribute("data-bs-title", decodeURI(tab.url));
         new bootstrap.Tooltip(urlAnchor);
 
         creationTime.textContent = tab.creationTime.toLocaleString();
@@ -88,19 +99,19 @@ import { funcPerformance } from "../../scripts/utility.js";
         return row;
     }
 
-    async function setCollectionTbody(tabs, tbody) {
-        Promise.all(
+    async function getCollectionRows(tabs) {
+        return Promise.all(
             tabs.map(
-                (tab) => getCollectionRow(tab).then((row) => { tbody.append(row); })
+                (tab) => getCollectionRow(tab)
             )
         );
     }
-    setCollectionTbody = funcPerformance(setCollectionTbody);
+    getCollectionRows = funcPerformance(getCollectionRows);
 
     async function setCollectionSubelements(collection, { collectionSubelements }) {
         collectionSubelements.id = `collection-${collection.id}-subelements`;
-        const tbody = collectionSubelements.querySelector("tbody");
-        setCollectionTbody(collection.tabs, tbody);
+        // const tbody = collectionSubelements.querySelector("tbody");
+        // tbody.append(...await getCollectionRows(collection.tabs));
     }
     setCollectionSubelements = funcPerformance(setCollectionSubelements);
 
@@ -122,8 +133,7 @@ import { funcPerformance } from "../../scripts/utility.js";
         collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${tabs.length} tab(s)`;
 
         const tbody = div.querySelector("tbody");
-        tbody.innerHTML = "";
-        setCollectionTbody(tabs, tbody);
+        tbody.replaceChildren(...await getCollectionRows(tabs));
     }
     showCollectionTabs = funcPerformance(showCollectionTabs);
 
@@ -136,7 +146,7 @@ import { funcPerformance } from "../../scripts/utility.js";
                 async (result) => {
                     const favicons = await Favicons.getAll();
                     const tabs = await Promise.all(result.map((tab) => Tab.fromObject(tab, favicons)));
-                    await showCollectionTabs(collection.id, tabs);
+                    showCollectionTabs(collection.id, tabs);
                 },
                 `Collection(${collection.title}) observer`
             )
@@ -146,6 +156,12 @@ import { funcPerformance } from "../../scripts/utility.js";
         document.getElementById("collections").append(collectionDiv);
     }
     showCollection = funcPerformance(showCollection);
+
+    async function addTabToCollection(collectionId, tab) {
+        const div = document.getElementById("collections").querySelector(`div[collection-id="${collectionId}"]`);
+        const tbody = div.querySelector("tbody");
+        tbody.append(await getCollectionRow(tab));
+    }
 
     const collectionsObservable = liveQuery(
         () => db.collections.toArray()
