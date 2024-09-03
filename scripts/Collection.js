@@ -2,16 +2,17 @@
 
 import { liveQuery } from "../../scripts/dexie.min.js";
 import { Favicons } from "./Favicons.js";
-import { db } from "./globals.js";
-import { Settings } from "./settings.js";
+import { db, log } from "./globals.js";
+import { Settings } from "./Settings.js";
 import { Tab } from "./Tab.js";
-import { classPerformance, escapeRegExp, instancePerformance } from "./utility.js";
+import { classPerformance, escapeRegex, instancePerformance } from "./utility.js";
 
 export class Collection {
-    constructor(id, title, filters, tabs = []) {
+    constructor(id, title, filters, allowDuplicates, tabs = []) {
         this.id = id;
         this.title = title;
         this.filters = filters;
+        this.allowDuplicates = allowDuplicates;
         this.tabs = tabs;
 
         instancePerformance(this, this.title);
@@ -40,10 +41,16 @@ export class Collection {
             Collection.getTabs(object.id),
             Promise.all(
                 object.filters.map(async (filter) => {
+                    let regex;
                     if (filter.startsWith("/") && filter.endsWith("/")) {
-                        return new RegExp(filter.slice(1, -1));
+                        // filter is a regex
+                        regex = new RegExp(filter.slice(1, -1));
                     }
-                    return new RegExp(await escapeRegExp(filter));
+                    else {
+                        regex = new RegExp(await escapeRegex(filter));
+                    }
+                    regex.original = filter;
+                    return regex;
                 })
             )
         ]);
@@ -55,14 +62,6 @@ export class Collection {
         );
     }
 
-    static async fromDB(id) {
-        const object = await db.collections.get(id);
-        if (object === undefined) {
-            console.warn(`Could not find collection with id ${id}`);
-        }
-        return Collection.fromObject(object);
-    }
-
     async getObservable() {
         return liveQuery(
             () => db.tabs.where({collectionId: this.id}).toArray()
@@ -71,9 +70,10 @@ export class Collection {
 
     async delete() {
         db.collections.delete(this.id);
+        log.info(`Deleted collection with id=${this.id} and title="${this.title}"`);
     }
 
     static {
-        classPerformance(Collection, Settings.load().performanceEnabled);
+        classPerformance(Collection, new Settings().performanceEnabled);
     }
 }

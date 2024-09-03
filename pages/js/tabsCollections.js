@@ -1,7 +1,7 @@
 "use strict";
 
+import { liveQuery } from "../../modules/dexie.min.js";
 import { Collection } from "../../scripts/Collection.js";
-import { liveQuery } from "../../scripts/dexie.min.js";
 import { Favicons } from "../../scripts/Favicons.js";
 import { db } from "../../scripts/globals.js";
 import { Tab } from "../../scripts/Tab.js";
@@ -17,6 +17,7 @@ import { funcPerformance } from "../../scripts/utility.js";
         collectionElementTemplate.classList.remove("d-none");
         // width of creation time column
         collectionElementTemplate.querySelectorAll("th")[4].style = `width: ${new Date().toLocaleString().length * fontSize}px;`;
+        collectionElementTemplate.querySelector("tbody").replaceChildren();
         return collectionElementTemplate;
     }
 
@@ -34,8 +35,10 @@ import { funcPerformance } from "../../scripts/utility.js";
         return tabTemplate;
     }
 
-    const collectionElementTemplate = await getCollectionElementTemplate();
     const tabTemplate = await getTabTemplate();
+    const collectionElementTemplate = await getCollectionElementTemplate();
+
+    const collections = await Collection.getAll();
 
     async function setCollectionHeader(collection, { collectionHeader }) {
         const [collapseButton, deleteButton, editButton] = collectionHeader.children;
@@ -46,23 +49,34 @@ import { funcPerformance } from "../../scripts/utility.js";
 
         new bootstrap.Popover(deleteButton);
         deleteButton.addEventListener("shown.bs.popover", async (event) => {
-            // TODO: popovers are very unreliable, need a way to always get the one that opened
             const popover = document.getElementById(event.target.attributes["aria-describedby"].value);
             const [deleteButtonYes, deleteButtonNo] = popover.querySelectorAll("a");
-            deleteButtonYes.addEventListener("click", async () => {
-                await collection.delete();
+            deleteButtonYes.addEventListener("click", () => {
+                collection.delete();
                 deleteButton.click();
             });
             deleteButtonNo.addEventListener("click", () => { deleteButton.click() });
         });
 
-        editButton.addEventListener("click", () => {});
+        editButton.addEventListener("click", async () => {
+            document.getElementById("collectionModalTitle").value = collection.title;
+            document.getElementById("collectionModalFilters").value = collection.filters.map((filter) => filter.original).join("\n");
+            document.getElementById("collectionModalAllowDuplicates").value = collection.allowDuplicates;
+            document.getElementById("collectionModalSaveButton").addEventListener("click", () => {
+                const title = document.getElementById("collectionModalTitle").value.trim();
+                const filters = document.getElementById("collectionModalFilters").value.trim().split("\n");
+                const allowDuplicates = document.getElementById("collectionModalAllowDuplicates").checked;
+                console.log({id: collection.id, title: title, filters: filters, allowDuplicates: allowDuplicates });
+                db.collections.put({id: collection.id, title: title, filters: filters, allowDuplicates: allowDuplicates });
+                collapseButton.textContent = `${title} | ${collection.tabs.length} tab(s)`;
+            });
+        });
     }
     setCollectionHeader = funcPerformance(setCollectionHeader);
 
     async function getCollectionRow(tab) {
         const row = tabTemplate.cloneNode(true);
-        row.setAttribute("tab-id", tab.id);
+        row.id = `tab-${tab.id}`;
         const [closeButton, favicon, title, url, creationTime] = row.children;
 
         closeButton.firstElementChild.addEventListener("click", () => tab.delete());
@@ -99,25 +113,14 @@ import { funcPerformance } from "../../scripts/utility.js";
         return row;
     }
 
-    async function getCollectionRows(tabs) {
-        return Promise.all(
-            tabs.map(
-                (tab) => getCollectionRow(tab)
-            )
-        );
-    }
-    getCollectionRows = funcPerformance(getCollectionRows);
-
     async function setCollectionSubelements(collection, { collectionSubelements }) {
         collectionSubelements.id = `collection-${collection.id}-subelements`;
-        // const tbody = collectionSubelements.querySelector("tbody");
-        // tbody.append(...await getCollectionRows(collection.tabs));
     }
     setCollectionSubelements = funcPerformance(setCollectionSubelements);
 
     async function getCollectionElement(collection) {
         const collectionElement = collectionElementTemplate.cloneNode(true);
-        collectionElement.setAttribute("collection-id", collection.id);
+        collectionElement.id = `collection-${collection.id}`;
 
         const [collectionHeader, collectionSubelements] = collectionElement.children;
         setCollectionHeader(collection, { collectionHeader: collectionHeader });
@@ -127,41 +130,57 @@ import { funcPerformance } from "../../scripts/utility.js";
     }
     getCollectionElement = funcPerformance(getCollectionElement);
 
-    async function showCollectionTabs(collectionId, tabs) {
-        const div = document.getElementById("collections").querySelector(`div[collection-id="${collectionId}"]`);
-        const collapser = div.querySelector("button");
-        collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${tabs.length} tab(s)`;
-
-        const tbody = div.querySelector("tbody");
-        tbody.replaceChildren(...await getCollectionRows(tabs));
+    async function setCollectionText(collectionDiv, collectionSize) {
+        const collapser = collectionDiv.querySelector("button");
+        collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${collectionSize} tab(s)`;
     }
-    showCollectionTabs = funcPerformance(showCollectionTabs);
 
     const observables = new Map();
 
-    async function showCollection(collection) {
+    async function createObservable(collection) {
         const observable = await collection.getObservable();
         observable.subscribe({
             next: funcPerformance(
-                async (result) => {
+                async (dbTabs) => {
+                    const collectionDiv = document.getElementById(`collection-${collection.id}`);
+                    const tbody = collectionDiv.querySelector("tbody");
+                    setCollectionText(collectionDiv, dbTabs.length);
+
+                    const pageTabs = [];
+                    const pageTabsIds = new Set();
+                    for (const tab of tbody.children) {
+                        pageTabs.push(tab);
+                        pageTabsIds.add(parseInt(tab.id.split("-")[1]));
+                    }
+
+                    const dbTabsIds = new Set(dbTabs.map((tab) => tab.id));
+                    const tabsToAddIds = dbTabsIds.difference(pageTabsIds);
+                    const tabsToRemoveIds = pageTabsIds.difference(dbTabsIds);
+
                     const favicons = await Favicons.getAll();
-                    const tabs = await Promise.all(result.map((tab) => Tab.fromObject(tab, favicons)));
-                    showCollectionTabs(collection.id, tabs);
+                    const tabsToAdd = await Promise.all(dbTabs.filter((tab) => tabsToAddIds.has(tab.id)).map((tab) => Tab.fromObject(tab, favicons)));
+                    Promise.all(tabsToAdd.map(async (tab) => {
+                        tbody.append(await getCollectionRow(tab));
+                    }));
+                    const tabsToRemove = pageTabs.filter((tab) => tabsToRemoveIds.has(parseInt(tab.id.split("-")[1])));
+
+                    for (const tab of tabsToRemove) {
+                        tab.remove();
+                    }
                 },
                 `Collection(${collection.title}) observer`
             )
         });
         observables.set(collection.id, observable);
+    }
+    createObservable = funcPerformance(createObservable);
+
+    async function showCollection(collection) {
         const collectionDiv = await getCollectionElement(collection);
         document.getElementById("collections").append(collectionDiv);
+        createObservable(collection);
     }
     showCollection = funcPerformance(showCollection);
-
-    async function addTabToCollection(collectionId, tab) {
-        const div = document.getElementById("collections").querySelector(`div[collection-id="${collectionId}"]`);
-        const tbody = div.querySelector("tbody");
-        tbody.append(await getCollectionRow(tab));
-    }
 
     const collectionsObservable = liveQuery(
         () => db.collections.toArray()
@@ -171,11 +190,30 @@ import { funcPerformance } from "../../scripts/utility.js";
         next: funcPerformance(
             async (collections) => {
                 observables.clear();
-                document.getElementById("collections").innerHTML = "";
-                Promise.all(collections.map(async (collectionObject) => {
-                    const collection = await Collection.fromObject(collectionObject);
-                    showCollection(collection);
+                const collectionsDiv = document.getElementById("collections");
+
+                const pageCollections = [];
+                const pageCollectionsIds = new Set();
+                for (const collectionDiv of collectionsDiv.children) {
+                    pageCollections.push(collectionDiv);
+                    pageCollectionsIds.add(parseInt(collectionDiv.id.split("-")[1]));
+                }
+
+                const dbCollectionsIds = new Set(collections.map((collection) => collection.id));
+                const collectionsToAddIds = dbCollectionsIds.difference(pageCollectionsIds);
+                const collectionsToRemoveIds = pageCollectionsIds.difference(dbCollectionsIds);
+
+                const collectionsToAdd = await Promise.all(collections.filter((collection) => collectionsToAddIds.has(collection.id)).map((collectionObject) => Collection.fromObject(collectionObject)));
+                Promise.all(collectionsToAdd.map(async (collection) => {
+                    collectionsDiv.append(await getCollectionElement(collection));
+                    createObservable(collection);
                 }));
+                const collectionsToRemove = pageCollections.filter((collection) => collectionsToRemoveIds.has(parseInt(collection.id.split("-")[1])));
+
+                for (const collection of collectionsToRemove) {
+                    collection.remove();
+                    observables.delete(collection.id);
+                }
             },
             `collectionsObservable observer`)
     });

@@ -34,13 +34,15 @@ export class Tab {
     }
 
     static async bulkCreate(tabs, returnNeeded = false) {
-        const prepared = await Promise.all(tabs.map(async (tab) => {
+        const hashes = await Favicons.bulkStore(tabs.map((tab) => tab.favicon));
+        const prepared = await Promise.all(tabs.map(async (tab, index) => {
+            tab.creationTime ??= new Date();
             return {
                 collectionId: tab.collectionId,
                 url: tab.url,
                 title: tab.title,
-                faviconHash: (tab.favicon !== undefined) ? await Favicons.store(tab.favicon) : undefined,
-                creationTime: (tab.creationTime ?? new Date()).getTime(),
+                faviconHash: hashes[index],
+                creationTime: tab.creationTime.getTime(),
             }
         }));
         if (!returnNeeded) {

@@ -1,9 +1,8 @@
 "use strict";
 
 import { ArrayExtensions } from "./extensions.js";
-import { settings } from "./globals.js";
+import { log, settings } from "./globals.js";
 
-// TODO: logger
 // TODO: import/export
 
 export function Uint8ArrayComparer(array1, array2) {
@@ -31,8 +30,12 @@ export async function regexStability(regex, string) {
 }
 regexStability = funcPerformance(regexStability);
 
-export async function escapeRegExp(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); // $& means the whole matched string
+export async function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export async function unescapeRegex(string) {
+    return string.replace(/\\(.)/g, "$1");
 }
 
 // TODO: move the performance stuff out
@@ -50,18 +53,28 @@ export function createCallStack() {
     return stack;
 }
 
+export function isThenable(obj) {
+    return obj["then"] !== undefined;
+}
+
 // while performanceEnabled should be taken from global settings, global settings may not have been initialized by the time when the function is called
 export function funcPerformance(func, funcName = func.name, thisArg = undefined, performanceEnabled = settings.performanceEnabled) {
     if (!performanceEnabled)
         return func;
+
     function inner(...rest) {
         const caller = createCallStack()[1];
         const t0 = performance.now();
-        const result = Promise.resolve(func.apply(thisArg, rest)).then((result) => {
-            console.log(`${funcName} (called by ${caller}) took ${performance.now() - t0} milliseconds`);
+        const result = func.apply(thisArg, rest);
+        const t1 = performance.now();
+        if (!isThenable(result)) {
+            log.debug(`${funcName} (called by ${caller}) took ${t1 - t0} milliseconds`);
+            return result;
+        }
+        return Promise.resolve(result).then((result) => {
+            log.debug(`${funcName} (called by ${caller}) took ${performance.now() - t0} milliseconds`);
             return result;
         });
-        return result;
     }
     return inner;
 }

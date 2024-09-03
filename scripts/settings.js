@@ -1,12 +1,18 @@
 "use strict";
 
+import { Logger } from "./Logger.js";
 
 export class Settings {
-    constructor(debugEnabled = true, performanceEnabled = true, fetchUndefinedFavicons = true, cacheFavicons = true) {
-        this.debugEnabled = debugEnabled;
+    constructor(load = true, logLevel = Logger.Levels.INFO, performanceEnabled = true, fetchUndefinedFavicons = true, cacheFavicons = true) {
+        this.logLevel = logLevel;
         this.performanceEnabled = performanceEnabled;
         this.fetchUndefinedFavicons = fetchUndefinedFavicons;
         this.cacheFavicons = cacheFavicons;
+
+        if (load) {
+            this.load();
+            return;
+        }
     }
 
     async save() {
@@ -15,11 +21,13 @@ export class Settings {
     }
 
     // load is not async so that it can be called in static initialization blocks
-    static load() {
+    load() {
         let settings = localStorage.getItem("settings");
         if (settings === null) {
-            return new Settings();
+            return;
         }
-        return JSON.parse(settings);
+        for (let key in settings) {
+            this[key] = settings[key];
+        }
     }
 }

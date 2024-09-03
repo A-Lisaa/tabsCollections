@@ -1,6 +1,7 @@
 "use strict";
 
 import { Collection } from "./Collection.js";
+import { log } from "./globals.js";
 import { Tab } from "./Tab.js";
 import { regexStability } from "./utility.js";
 
@@ -54,9 +55,9 @@ browser.action.onClicked.addListener(async () => {
     for (const tab of selectedTabs) {
         const mostSpecificCollections = await getMostSpecificCollections(tab, collections);
         if (mostSpecificCollections.length === 0)
-            console.warn("No matches found");
+            log.warn("No matches found");
         else if (mostSpecificCollections.length > 1)
-            console.warn(`Multiple matches found: ${mostSpecificCollections.map(c => c.filters)}`);
+            log.warn(`Multiple matches found: ${mostSpecificCollections.map(c => c.filters)}`);
         else {
             // TODO: notification API when added
             res.push({
@@ -65,6 +66,12 @@ browser.action.onClicked.addListener(async () => {
                 title: tab.title,
                 favicon: tab.favIconUrl
             });
+            // Tab.create({
+            //     collectionId: mostSpecificCollections[0].id,
+            //     url: tab.url,
+            //     title: tab.title,
+            //     favicon: tab.favIconUrl
+            // })
         }
     }
     Tab.bulkCreate(res);

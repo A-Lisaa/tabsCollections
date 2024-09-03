@@ -1,28 +1,38 @@
 "use strict";
 
 import { liveQuery } from "../../scripts/dexie.min.js";
-import { db, settings } from "./globals.js";
-import { md5 } from "./md5.min.js";
-import { Settings } from "./settings.js";
+import { md5 } from "../modules/md5.min.js";
+import { db, log, settings } from "./globals.js";
+import { Settings } from "./Settings.js";
 import { classPerformance, funcPerformance } from "./utility.js";
 
 export class Favicons {
     static #faviconsObservable;
-    static cache;
+    static cache = null;
+
+    static getCacheSize() {
+        if (!new Settings().cacheFavicons)
+            return null;
+        let size = 0;
+        for (const image of Favicons.cache.values()) {
+            size += (typeof image === "string") ? new Blob([image]).size : image.size;
+        }
+        return size;
+    }
 
     static {
-        const settings = Settings.load();
+        const settings = new Settings();
         if (settings.cacheFavicons) {
-            console.log("Caching favicons");
+            log.info("Caching favicons");
             Favicons.#faviconsObservable = liveQuery(
                 () => db.favicons.toArray()
             )
 
             Favicons.#faviconsObservable.subscribe({
                 next: funcPerformance(
-                    async (result) => {
+                    async (favicons) => {
                         Favicons.cache = new Map();
-                        for (const { hash, image } of result) {
+                        for (const { hash, image } of favicons) {
                             if (typeof image === "string") {
                                 Favicons.cache.set(hash, image);
                             }
@@ -30,13 +40,7 @@ export class Favicons {
                                 Favicons.cache.set(hash, new Blob([image]));
                             }
                         }
-                        if (settings.debugEnabled) {
-                            let size = 0;
-                            for (const image of Favicons.cache.values()) {
-                                size += (typeof image === "string") ? new Blob([image]).size :  image.size;
-                            }
-                            console.log(`%cFavicons.cache size = ${size/1024} KB`, "color: #bada55;");
-                        }
+                        log.debug(`%cFavicons.cache size = ${Favicons.getCacheSize()/1024} KB`, "color: #bada55;");
                     },
                     "Favicons observable"
                 )
@@ -44,24 +48,34 @@ export class Favicons {
         }
     }
 
-    static #canvas = new OffscreenCanvas(16, 16);
-    static #context = Favicons.#canvas.getContext("2d");
-    static #img = new Image(16, 16);
-
     static async resize(favicon) {
-        Favicons.#img.src = favicon;
-        Favicons.#context.reset();
-        Favicons.#context.drawImage(Favicons.#img, 0, 0, 16, 16);
-        return Favicons.#canvas.convertToBlob();
+        const canvas = new OffscreenCanvas(16, 16);
+        const context = canvas.getContext("2d");
+        const img = new Image(16, 16);
+        img.src = favicon;
+        await img.decode();
+        context.drawImage(img, 0, 0, 16, 16);
+        return canvas.convertToBlob();
+    }
+
+    static async exists(faviconHash) {
+        if (settings.cacheFavicons) {
+            if (Favicons.cache.has(faviconHash))
+                return true;
+            return false;
+        }
+        else {
+            if ((await db.favicons.get(faviconHash)) !== undefined)
+                return true;
+            return false;
+        }
     }
 
     static async store(favicon) {
         const hash = md5(favicon);
 
         // md5 already exists
-        if (settings.cacheFavicons && Favicons.cache.has(hash))
-            return hash;
-        else if ((await db.favicons.get(hash)) !== undefined)
+        if (Favicons.exists(hash))
             return hash;
 
         if (favicon.startsWith("data:image")) {
@@ -73,21 +87,30 @@ export class Favicons {
     }
 
     static async bulkStore(favicons) {
-        // TODO: well, this
-        const prepared = await Promise.all(favicons.map(async (favicon) => {
+        const results = [];
+        const prepared = [];
+        for (let favicon of favicons) {
+            if (favicon === undefined) {
+                results.push(undefined);
+                continue;
+            }
+
             const hash = md5(favicon);
 
-            if (settings.cacheFavicons && Favicons.cache.has(hash))
-                return hash;
-            else if ((await db.favicons.get(hash)) !== undefined)
-                return hash;
+            if (results.includes(hash) || await Favicons.exists(hash)) {
+                results.push(hash);
+                continue;
+            }
+            results.push(hash);
 
             if (favicon.startsWith("data:image")) {
                 favicon = await Favicons.resize(favicon);
                 favicon = await favicon.arrayBuffer();
             }
-            return hash;
-        }));
+            prepared.push({ hash: hash, image: favicon });
+        }
+        db.favicons.bulkAdd(prepared);
+        return results;
     }
 
     static async getAll() {
