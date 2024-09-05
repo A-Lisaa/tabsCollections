@@ -2,7 +2,7 @@
 
 import { Favicons } from "./Favicons.js";
 import { db } from "./globals.js";
-import { funcPerformance } from "./utility.js";
+import { funcPerformance } from "./profiler.js";
 
 export class Tab {
     constructor(id, collectionId, url, title, favicon, creationTime = new Date()) {
@@ -12,8 +12,6 @@ export class Tab {
         this.title = title;
         this.favicon = favicon;
         this.creationTime = creationTime;
-
-        //instancePerformance(this, this.title);
     }
 
     static async create(collectionId, url, title, favicon, creationTime = new Date(), returnNeeded = false) {
@@ -21,7 +19,7 @@ export class Tab {
         if (favicon !== undefined) {
             faviconHash = await Favicons.store(favicon);
         }
-        const id = await db.tabs.add({
+        const addition = db.tabs.add({
             collectionId: collectionId,
             url: url,
             title: title,
@@ -30,7 +28,7 @@ export class Tab {
         });
         if (!returnNeeded)
             return;
-        return new Tab(id, collectionId, title, favicon, creationTime);
+        return new Tab(await addition, collectionId, title, favicon, creationTime);
     }
 
     static async bulkCreate(tabs, returnNeeded = false) {
@@ -66,19 +64,25 @@ export class Tab {
         );
     }
 
-    async delete() {
-        await db.tabs.delete(this.id);
-        Favicons.cleanup();
+    static async getCollectionTabs(collectionId) {
+        const [favicons, tabsObjects] = await Promise.all([
+            Favicons.getAll(),
+            db.tabs.where({collectionId: collectionId}).toArray()
+        ]);
+        return Promise.all(tabsObjects.map((tabObject) => Tab.fromObject(tabObject, favicons)));
     }
 
-    static async deleteBulk(tabs) {
-        await Promise.all(tabs.map((tab) => tab.delete()));
-        Favicons.cleanup();
+    static async delete(id) {
+        // TODO: check if there are any tabs with the same favicon hash left, if not remove the favicon
+        db.tabs.delete(id);
+    }
+
+    static async bulkDelete(tabs) {
+        db.tabs.bulkDelete(tabs.map((tab) => tab.id));
     }
 
     static {
         Tab["create"] = funcPerformance(Tab["create"], "Tab.create");
         Tab["bulkCreate"] = funcPerformance(Tab["bulkCreate"], "Tab.bulkCreate");
-        Tab["faviconsCleanup"] = funcPerformance(Tab["faviconsCleanup"], "Tab.faviconsCleanup");
     }
 }

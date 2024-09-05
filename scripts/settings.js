@@ -11,7 +11,6 @@ export class Settings {
 
         if (load) {
             this.load();
-            return;
         }
     }
 

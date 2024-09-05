@@ -1,7 +1,6 @@
 "use strict";
 
 import { Dexie } from "../modules/dexie.min.js";
-import { Collection } from "./Collection.js";
 import { Logger } from "./Logger.js";
 import { Settings } from "./Settings.js";
 
@@ -17,7 +16,8 @@ export async function openDB() {
     });
 
     db.on("populate", () => {
-        Collection.create("default", ["/.+/"]);
+        // the default collection is added to the db directly to not import Collection and create import issues with what Colletion.js imports
+        db.collections.add({ title: "default", filters: "/.+/" })
     });
 
     return db;

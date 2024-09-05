@@ -1,17 +1,16 @@
 "use strict";
 
-import { liveQuery } from "../../scripts/dexie.min.js";
+import { liveQuery } from "../../modules/dexie.min.js";
 import { md5 } from "../modules/md5.min.js";
 import { db, log, settings } from "./globals.js";
-import { Settings } from "./Settings.js";
-import { classPerformance, funcPerformance } from "./utility.js";
+import { classPerformance, funcPerformance } from "./profiler.js";
 
 export class Favicons {
     static #faviconsObservable;
     static cache = null;
 
     static getCacheSize() {
-        if (!new Settings().cacheFavicons)
+        if (!settings.cacheFavicons)
             return null;
         let size = 0;
         for (const image of Favicons.cache.values()) {
@@ -21,32 +20,38 @@ export class Favicons {
     }
 
     static {
-        const settings = new Settings();
         if (settings.cacheFavicons) {
-            log.info("Caching favicons");
             Favicons.#faviconsObservable = liveQuery(
                 () => db.favicons.toArray()
             )
 
-            Favicons.#faviconsObservable.subscribe({
-                next: funcPerformance(
+            Favicons.#faviconsObservable.subscribe(funcPerformance(
                     async (favicons) => {
-                        Favicons.cache = new Map();
-                        for (const { hash, image } of favicons) {
-                            if (typeof image === "string") {
-                                Favicons.cache.set(hash, image);
-                            }
-                            else {
-                                Favicons.cache.set(hash, new Blob([image]));
-                            }
-                        }
+                        Favicons.cache = await Favicons.fromDBArray(favicons);
                         log.debug(`%cFavicons.cache size = ${Favicons.getCacheSize()/1024} KB`, "color: #bada55;");
                     },
                     "Favicons observable"
                 )
-            });
+            );
         }
     }
+
+    static async convertDBImage(image) {
+        if (typeof image === "string")
+            // image is a string with url
+            return image;
+        // image is an ArrayBuffer with image object ready to be displayed
+        return new Blob([image]);
+    }
+
+    static async fromDBArray(favicons) {
+        return new Map(await Promise.all(favicons.map(
+            async ({ hash, image }) => [
+                hash,
+                await Favicons.convertDBImage(image)
+            ]
+       )));
+   }
 
     static async resize(favicon) {
         const canvas = new OffscreenCanvas(16, 16);
@@ -74,8 +79,7 @@ export class Favicons {
     static async store(favicon) {
         const hash = md5(favicon);
 
-        // md5 already exists
-        if (Favicons.exists(hash))
+        if (await Favicons.exists(hash))
             return hash;
 
         if (favicon.startsWith("data:image")) {
@@ -88,7 +92,7 @@ export class Favicons {
 
     static async bulkStore(favicons) {
         const results = [];
-        const prepared = [];
+        const toStore = [];
         for (let favicon of favicons) {
             if (favicon === undefined) {
                 results.push(undefined);
@@ -97,6 +101,7 @@ export class Favicons {
 
             const hash = md5(favicon);
 
+            // the favicon has already been prepared for storing or already exists
             if (results.includes(hash) || await Favicons.exists(hash)) {
                 results.push(hash);
                 continue;
@@ -107,34 +112,29 @@ export class Favicons {
                 favicon = await Favicons.resize(favicon);
                 favicon = await favicon.arrayBuffer();
             }
-            prepared.push({ hash: hash, image: favicon });
+            toStore.push({ hash: hash, image: favicon });
         }
-        db.favicons.bulkAdd(prepared);
+        db.favicons.bulkAdd(toStore);
         return results;
     }
 
     static async getAll() {
-        if (settings.cacheFavicons) {
+        if (settings.cacheFavicons)
             return Favicons.cache;
-        }
-        const favicons = new Map();
-        await db.favicons.toCollection().each(({ hash, image }) => {
-            favicons.set(hash, image);
-        });
-        return favicons;
+        return Favicons.fromDBArray(await db.favicons.toArray());
     }
 
     static async cleanup() {
-        const [tabs, favicons] = Promise.all([
-            db.tabs.toArray(),
-            db.favicons.toArray(),
-        ]);
+        const [tabs, favicons] = await db.transaction("r", db.tabs, db.favicons, () => {
+            return Promise.all([
+                db.tabs.toArray(),
+                db.favicons.toArray(),
+            ]);
+        });
         const hashes = new Set(tabs.map((tab) => tab.faviconHash));
-        Promise.all(favicons.map((favicon) => {
-            if (!hashes.has(favicon.hash)) {
-                db.favicons.delete(favicon.hash);
-            }
-        }));
+        const toDelete = favicons.filter((favicon) => !hashes.has(favicon));
+        db.favicons.bulkDelete(toDelete);
+        log.info("Favicons cleanup ran");
     }
 
     static {

@@ -1,11 +1,10 @@
 "use strict";
 
-import { liveQuery } from "../../scripts/dexie.min.js";
-import { Favicons } from "./Favicons.js";
-import { db, log } from "./globals.js";
-import { Settings } from "./Settings.js";
+import { liveQuery } from "../../modules/dexie.min.js";
+import { db } from "./globals.js";
+import { classPerformance, instancePerformance } from "./profiler.js";
+import { escapeRegex } from "./regex.js";
 import { Tab } from "./Tab.js";
-import { classPerformance, escapeRegex, instancePerformance } from "./utility.js";
 
 export class Collection {
     constructor(id, title, filters, allowDuplicates, tabs = []) {
@@ -18,29 +17,19 @@ export class Collection {
         instancePerformance(this, this.title);
     }
 
-    static async create(title, filters) {
-        const id = await db.collections.add({title: title, filters: filters});
-        return new Collection(id, title, filters);
-    }
-
-    static async getTabs(collectionId) {
-        const [favicons, tabsObjects] = await Promise.all([
-            Favicons.getAll(),
-            db.tabs.where({collectionId: collectionId}).toArray()
-        ]);
-        return Promise.all(tabsObjects.map((tabObject) => Tab.fromObject(tabObject, favicons)));
-    }
-
-    static async getAll() {
-        const collections = await db.collections.toArray();
-        return Promise.all(collections.map((collectionObject) => Collection.fromObject(collectionObject)));
+    static async create(title, filters, allowDuplicates, returnNeeded = false) {
+        const addition = db.collections.add({title: title, filters: filters, allowDuplicates: allowDuplicates });
+        if (!returnNeeded)
+            return;
+        return new Collection(await addition, title, filters, allowDuplicates);
     }
 
     static async fromObject(object) {
         const [tabs, filters] = await Promise.all([
-            Collection.getTabs(object.id),
+            Tab.getCollectionTabs(object.id),
             Promise.all(
                 object.filters.map(async (filter) => {
+                    // TODO: support for comments (starting with #)
                     let regex;
                     if (filter.startsWith("/") && filter.endsWith("/")) {
                         // filter is a regex
@@ -49,6 +38,7 @@ export class Collection {
                     else {
                         regex = new RegExp(await escapeRegex(filter));
                     }
+                    // store the original one to show in the edit modal
                     regex.original = filter;
                     return regex;
                 })
@@ -62,18 +52,33 @@ export class Collection {
         );
     }
 
-    async getObservable() {
-        return liveQuery(
-            () => db.tabs.where({collectionId: this.id}).toArray()
-        );
+    static async getAll() {
+        const collections = await db.collections.toArray();
+        return Promise.all(collections.map((collectionObject) => Collection.fromObject(collectionObject)));
     }
 
-    async delete() {
-        db.collections.delete(this.id);
-        log.info(`Deleted collection with id=${this.id} and title="${this.title}"`);
+    static async fromDB(id) {
+        const object = await db.collections.get(id);
+        if (object === undefined) {
+            console.warn(`Could not find collection with id ${id}`);
+        }
+        return Collection.fromObject(object);
+    }
+
+    static async delete(id) {
+        db.collections.delete(id);
+        db.tabs.where({ collectionId: id }).delete();
+    }
+
+    async getObservable() {
+        const query = liveQuery(
+            () => db.tabs.where({collectionId: this.id}).toArray()
+        );
+        query.collectionId = this.id;
+        return query;
     }
 
     static {
-        classPerformance(Collection, new Settings().performanceEnabled);
+        classPerformance(Collection);
     }
 }

@@ -4,8 +4,8 @@ import { liveQuery } from "../../modules/dexie.min.js";
 import { Collection } from "../../scripts/Collection.js";
 import { Favicons } from "../../scripts/Favicons.js";
 import { db } from "../../scripts/globals.js";
+import { funcPerformance } from "../../scripts/profiler.js";
 import { Tab } from "../../scripts/Tab.js";
-import { funcPerformance } from "../../scripts/utility.js";
 
 (async function() {
     async function getCollectionElementTemplate() {
@@ -26,23 +26,28 @@ import { funcPerformance } from "../../scripts/utility.js";
         tabTemplate.removeAttribute("id");
         tabTemplate.removeAttribute("aria-hidden");
         tabTemplate.classList.remove("d-none");
-        tabTemplate.addEventListener("mouseenter", (event) => {
-            event.target.querySelector(".btn-close").classList.remove("invisible");
-        });
-        tabTemplate.addEventListener("mouseleave", (event) => {
-            event.target.querySelector(".btn-close").classList.add("invisible");
-        });
         return tabTemplate;
     }
 
     const tabTemplate = await getTabTemplate();
     const collectionElementTemplate = await getCollectionElementTemplate();
 
-    const collections = await Collection.getAll();
+    // TODO: a function for collection create/edit modal
+
+    async function setCollectionText(collectionElement, collectionSize) {
+        // TODO: a good one for setting the collapser text
+        const collapser = collectionElement.querySelector("button");
+        collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${collectionSize} tab(s)`;
+    }
+
+    function getIdFromCollectionElement(element) {
+        return parseInt(element.id.split("-")[1]);
+    }
 
     async function setCollectionHeader(collection, { collectionHeader }) {
         const [collapseButton, deleteButton, editButton] = collectionHeader.children;
 
+        // for the collapser
         collapseButton.setAttribute("data-bs-target", `#collection-${collection.id}-subelements`);
         collapseButton.setAttribute("aria-controls", `collection-${collection.id}-subelements`);
         collapseButton.textContent = `${collection.title} | ${collection.tabs.length} tab(s)`;
@@ -51,14 +56,16 @@ import { funcPerformance } from "../../scripts/utility.js";
         deleteButton.addEventListener("shown.bs.popover", async (event) => {
             const popover = document.getElementById(event.target.attributes["aria-describedby"].value);
             const [deleteButtonYes, deleteButtonNo] = popover.querySelectorAll("a");
-            deleteButtonYes.addEventListener("click", () => {
-                collection.delete();
+            deleteButtonYes.addEventListener("click", async () => {
+                Collection.delete(getIdFromCollectionElement(event.target.parentNode.parentNode));
                 deleteButton.click();
             });
-            deleteButtonNo.addEventListener("click", () => { deleteButton.click() });
+            deleteButtonNo.addEventListener("click", () => deleteButton.click());
         });
 
-        editButton.addEventListener("click", async () => {
+        editButton.addEventListener("click", async (event) => {
+            const collectionElement = event.target.parentNode.parentNode;
+            const collection = Collection.fromDB(getIdFromCollectionElement(collectionElement));
             document.getElementById("collectionModalTitle").value = collection.title;
             document.getElementById("collectionModalFilters").value = collection.filters.map((filter) => filter.original).join("\n");
             document.getElementById("collectionModalAllowDuplicates").value = collection.allowDuplicates;
@@ -66,27 +73,40 @@ import { funcPerformance } from "../../scripts/utility.js";
                 const title = document.getElementById("collectionModalTitle").value.trim();
                 const filters = document.getElementById("collectionModalFilters").value.trim().split("\n");
                 const allowDuplicates = document.getElementById("collectionModalAllowDuplicates").checked;
-                console.log({id: collection.id, title: title, filters: filters, allowDuplicates: allowDuplicates });
-                db.collections.put({id: collection.id, title: title, filters: filters, allowDuplicates: allowDuplicates });
-                collapseButton.textContent = `${title} | ${collection.tabs.length} tab(s)`;
+                console.log({ id: collection.id, title: title, filters: filters, allowDuplicates: allowDuplicates });
+                db.collections.put({ id: collection.id, title: title, filters: filters, allowDuplicates: allowDuplicates });
+                collectionElement.querySelector("button").textContent = `${title} | ${collection.tabs.length} tab(s)`;
             });
         });
     }
     setCollectionHeader = funcPerformance(setCollectionHeader);
 
-    async function getCollectionRow(tab) {
+    function getIdFromTabElement(element) {
+        return parseInt(element.id.split("-")[1]);
+    }
+
+    async function getTabElement(tab) {
         const row = tabTemplate.cloneNode(true);
         row.id = `tab-${tab.id}`;
+
+        row.addEventListener("mouseenter", (event) => {
+            event.target.querySelector("button").classList.remove("invisible");
+        });
+        row.addEventListener("mouseleave", (event) => {
+            event.target.querySelector("button").classList.add("invisible");
+        });
+
         const [closeButton, favicon, title, url, creationTime] = row.children;
 
-        closeButton.firstElementChild.addEventListener("click", () => tab.delete());
+        closeButton.firstElementChild.addEventListener("click", async (event) => Tab.delete(getIdFromTabElement(event.target.closest("tr"))));
 
         if (tab.favicon !== undefined) {
             if (typeof tab.favicon === "string") {
+                // tab.favicon is a url to an image
                 favicon.firstElementChild.src = tab.favicon;
             }
             else {
-                // if tab.favicon is Blob
+                // tab.favicon is a Blob with an image object
                 const faviconUrl = URL.createObjectURL(tab.favicon);
                 favicon.firstElementChild.src = faviconUrl;
                 URL.revokeObjectURL(faviconUrl);
@@ -99,12 +119,14 @@ import { funcPerformance } from "../../scripts/utility.js";
         const titleAnchor = title.firstElementChild;
         titleAnchor.href = tab.url;
         titleAnchor.textContent = tab.title ?? "No title";
+        // for the tooltip
         titleAnchor.setAttribute("data-bs-title", titleAnchor.textContent);
         new bootstrap.Tooltip(titleAnchor);
 
         const urlAnchor = url.firstElementChild;
         urlAnchor.href = tab.url;
         urlAnchor.textContent = decodeURI(tab.url);
+        // for the tooltip
         urlAnchor.setAttribute("data-bs-title", decodeURI(tab.url));
         new bootstrap.Tooltip(urlAnchor);
 
@@ -130,99 +152,103 @@ import { funcPerformance } from "../../scripts/utility.js";
     }
     getCollectionElement = funcPerformance(getCollectionElement);
 
-    async function setCollectionText(collectionDiv, collectionSize) {
-        const collapser = collectionDiv.querySelector("button");
-        collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${collectionSize} tab(s)`;
-    }
-
     const observables = new Map();
 
     async function createObservable(collection) {
         const observable = await collection.getObservable();
-        observable.subscribe({
-            next: funcPerformance(
+        observable.subscribe(funcPerformance(
                 async (dbTabs) => {
-                    const collectionDiv = document.getElementById(`collection-${collection.id}`);
-                    const tbody = collectionDiv.querySelector("tbody");
-                    setCollectionText(collectionDiv, dbTabs.length);
+                    const collectionElement = document.getElementById(`collection-${observable.collectionId}`);
+                    setCollectionText(collectionElement, dbTabs.length);
+
+                    const tbody = collectionElement.querySelector("tbody");
 
                     const pageTabs = [];
                     const pageTabsIds = new Set();
                     for (const tab of tbody.children) {
                         pageTabs.push(tab);
-                        pageTabsIds.add(parseInt(tab.id.split("-")[1]));
+                        pageTabsIds.add(getIdFromTabElement(tab));
                     }
 
                     const dbTabsIds = new Set(dbTabs.map((tab) => tab.id));
+
+                    // tabs which are already in the db but not on the page yet
                     const tabsToAddIds = dbTabsIds.difference(pageTabsIds);
+                    // tabs which are still on the page but not in the db already
                     const tabsToRemoveIds = pageTabsIds.difference(dbTabsIds);
 
                     const favicons = await Favicons.getAll();
-                    const tabsToAdd = await Promise.all(dbTabs.filter((tab) => tabsToAddIds.has(tab.id)).map((tab) => Tab.fromObject(tab, favicons)));
-                    Promise.all(tabsToAdd.map(async (tab) => {
-                        tbody.append(await getCollectionRow(tab));
-                    }));
-                    const tabsToRemove = pageTabs.filter((tab) => tabsToRemoveIds.has(parseInt(tab.id.split("-")[1])));
+                    const tabsToAdd = await Promise.all(
+                        dbTabs
+                            .filter((tab) => tabsToAddIds.has(tab.id))
+                            .map((tab) => Tab.fromObject(tab, favicons))
+                    );
+                    Promise.all(tabsToAdd.map(
+                        async (tab) => {
+                            tbody.append(await getTabElement(tab));
+                        }
+                    ));
 
-                    for (const tab of tabsToRemove) {
+                    const tabsToRemove = pageTabs.filter(
+                        (tab) => tabsToRemoveIds.has(getIdFromTabElement(tab))
+                    );
+                    for (const tab of tabsToRemove)
                         tab.remove();
-                    }
                 },
                 `Collection(${collection.title}) observer`
             )
-        });
+        );
         observables.set(collection.id, observable);
     }
-    createObservable = funcPerformance(createObservable);
-
-    async function showCollection(collection) {
-        const collectionDiv = await getCollectionElement(collection);
-        document.getElementById("collections").append(collectionDiv);
-        createObservable(collection);
-    }
-    showCollection = funcPerformance(showCollection);
 
     const collectionsObservable = liveQuery(
         () => db.collections.toArray()
     );
 
-    collectionsObservable.subscribe({
-        next: funcPerformance(
-            async (collections) => {
-                observables.clear();
-                const collectionsDiv = document.getElementById("collections");
+    collectionsObservable.subscribe(funcPerformance(
+        async (collections) => {
+            observables.clear();
+            const collectionsDiv = document.getElementById("collections");
 
-                const pageCollections = [];
-                const pageCollectionsIds = new Set();
-                for (const collectionDiv of collectionsDiv.children) {
-                    pageCollections.push(collectionDiv);
-                    pageCollectionsIds.add(parseInt(collectionDiv.id.split("-")[1]));
-                }
+            const pageCollections = [];
+            const pageCollectionsIds = new Set();
+            for (const collectionElement of collectionsDiv.children) {
+                pageCollections.push(collectionElement);
+                pageCollectionsIds.add(getIdFromCollectionElement(collectionElement));
+            }
 
-                const dbCollectionsIds = new Set(collections.map((collection) => collection.id));
-                const collectionsToAddIds = dbCollectionsIds.difference(pageCollectionsIds);
-                const collectionsToRemoveIds = pageCollectionsIds.difference(dbCollectionsIds);
+            const dbCollectionsIds = new Set(collections.map((collection) => collection.id));
 
-                const collectionsToAdd = await Promise.all(collections.filter((collection) => collectionsToAddIds.has(collection.id)).map((collectionObject) => Collection.fromObject(collectionObject)));
-                Promise.all(collectionsToAdd.map(async (collection) => {
-                    collectionsDiv.append(await getCollectionElement(collection));
-                    createObservable(collection);
-                }));
-                const collectionsToRemove = pageCollections.filter((collection) => collectionsToRemoveIds.has(parseInt(collection.id.split("-")[1])));
+            const collectionsToAddIds = dbCollectionsIds.difference(pageCollectionsIds);
+            const collectionsToRemoveIds = pageCollectionsIds.difference(dbCollectionsIds);
 
-                for (const collection of collectionsToRemove) {
+            const collectionsToAdd = await Promise.all(
+                collections
+                    .filter((collection) => collectionsToAddIds.has(collection.id))
+                    .map((collectionObject) => Collection.fromObject(collectionObject))
+            );
+            Promise.all(collectionsToAdd.map(async (collection) => {
+                collectionsDiv.append(await getCollectionElement(collection));
+                createObservable(collection);
+            }));
+
+            for (const collection of pageCollections) {
+                const collectionId = getIdFromCollectionElement(collection);
+                if (collectionsToRemoveIds.has(collectionId)) {
                     collection.remove();
-                    observables.delete(collection.id);
+                    observables.delete(collectionId);
                 }
-            },
-            `collectionsObservable observer`)
-    });
+            }
+        },
+        `collectionsObservable observer`)
+    );
 
     async function createCollection() {
         document.getElementById("collectionModalSaveButton").addEventListener("click", () => {
             const title = document.getElementById("collectionModalTitle").value.trim();
             const filters = document.getElementById("collectionModalFilters").value.trim().split("\n");
-            Collection.create(title, filters);
+            const allowDuplicates = document.getElementById("collectionModalAllowDuplicates").checked;
+            Collection.create(title, filters, allowDuplicates);
         });
     }
 

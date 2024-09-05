@@ -2,62 +2,68 @@
 
 import { Collection } from "./Collection.js";
 import { log } from "./globals.js";
+import { getRegexStability } from "./regex.js";
 import { Tab } from "./Tab.js";
-import { regexStability } from "./utility.js";
 
 browser.runtime.onInstalled.addListener(() => {
-    browser.menus.create({
-        id: "showTabsCollectionsPage",
-        title: "Show tabsCollections Page",
-        contexts: ["action"]
-    });
+    const menus = new Map([
+        ["showTabsCollectionsPage", {
+            "title": "Show tabsCollections Page",
+            "contexts": ["action"],
+            "onclick": (info) => {
+                browser.tabs.create({
+                    active: true,
+                    index: 0,
+                    pinned: true,
+                    url: "../pages/tabsCollections.html",
+                });
+            }
+        }],
+    ]);
+
+    for (const [id, menu] of menus.entries()) {
+        browser.menus.create({
+            id: id,
+            title: menu.title,
+            contexts: menu.contexts,
+        });
+    }
 
     browser.menus.onClicked.addListener((info) => {
-        if (info.menuItemId === "showTabsCollectionsPage") {
-            browser.tabs.create({
-                active: true,
-                index: 0,
-                pinned: true,
-                url: "../pages/tabsCollections.html",
-            });
-        }
+        menus.get(info.menuItemId).onclick(info);
     });
 });
 
 browser.action.onClicked.addListener(async () => {
     async function getMostSpecificCollections(tab, collections) {
         const mostSpecificCollections = [];
-        let mostSpecicicMatchesCount = Infinity;
+        let mostSpecificRegexStability = Infinity;
         for (const collection of collections) {
             for (const filter of collection.filters) {
-                let regexMatches = await regexStability(filter, tab.url);
-                if (regexMatches > 0) {
-                    if (regexMatches < mostSpecicicMatchesCount) {
-                        mostSpecificCollections[0] = collection;
-                    }
-                    else if (regexMatches === mostSpecicicMatchesCount) {
-                        mostSpecificCollections.push(collection);
-                    }
-                    mostSpecicicMatchesCount = regexMatches;
-                    break;
+                let regexStability = await getRegexStability(filter, tab.url);
+                if (regexStability === 0 || regexStability > mostSpecificRegexStability)
+                    continue;
+                if (regexStability < mostSpecificRegexStability) {
+                    mostSpecificRegexStability = regexStability;
+                    mostSpecificCollections.length = 0;
                 }
+                mostSpecificCollections.push(collection);
             }
         }
         return mostSpecificCollections;
     }
 
-    const [collections, selectedTabs, extensionTab] = await Promise.all([
+    const [collections, selectedTabs] = await Promise.all([
         Collection.getAll(),
         browser.tabs.query({ highlighted: true, currentWindow: true }),
-        browser.tabs.query({ url: "moz-extension://07e46114-c3e0-486b-bdb1-8efa7e4e1485/pages/tabsCollections.html" })
     ]);
     const res = [];
     for (const tab of selectedTabs) {
         const mostSpecificCollections = await getMostSpecificCollections(tab, collections);
         if (mostSpecificCollections.length === 0)
-            log.warn("No matches found");
+            log.warn(`No matches found for ${tab.url}`);
         else if (mostSpecificCollections.length > 1)
-            log.warn(`Multiple matches found: ${mostSpecificCollections.map(c => c.filters)}`);
+            log.warn(`Multiple matches found for ${tab.url} : ${mostSpecificCollections.map(c => c.filters)}`);
         else {
             // TODO: notification API when added
             res.push({
@@ -66,12 +72,6 @@ browser.action.onClicked.addListener(async () => {
                 title: tab.title,
                 favicon: tab.favIconUrl
             });
-            // Tab.create({
-            //     collectionId: mostSpecificCollections[0].id,
-            //     url: tab.url,
-            //     title: tab.title,
-            //     favicon: tab.favIconUrl
-            // })
         }
     }
     Tab.bulkCreate(res);
