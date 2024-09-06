@@ -32,12 +32,35 @@ import { Tab } from "../../scripts/Tab.js";
     const tabTemplate = await getTabTemplate();
     const collectionElementTemplate = await getCollectionElementTemplate();
 
-    // TODO: a function for collection create/edit modal
+    async function setCollectionModalData(collection) {
+        document.getElementById("collectionModalTitle").textContent = `Collection ${collection.id}`;
+        document.getElementById("collectionModalFormTitle").value = collection.title;
+        document.getElementById("collectionModalFormFilters").value = collection.originalFilters.join("\n");
+        document.getElementById("collectionModalFormAllowDuplicates").checked = collection.allowDuplicates;
+    }
 
-    async function setCollectionText(collectionElement, collectionSize) {
-        // TODO: a good one for setting the collapser text
-        const collapser = collectionElement.querySelector("button");
-        collapser.textContent = `${collapser.textContent.split(" | ")[0]} | ${collectionSize} tab(s)`;
+    async function getCollectionModalData() {
+        return {
+            id: (document.getElementById("collectionModalTitle").textContent !== "") ? parseInt(document.getElementById("collectionModalTitle").textContent.split(" ")[1]) : undefined,
+            title: document.getElementById("collectionModalFormTitle").value.trim(),
+            filters: document.getElementById("collectionModalFormFilters").value.trim().split("\n"),
+            allowDuplicates: document.getElementById("collectionModalFormAllowDuplicates").checked,
+        };
+    }
+
+    async function pullUpCollectionModal(onSave = (collectionData) => {}) {
+        document.getElementById("collectionModalForm").addEventListener("submit", async () => {
+            const collectionData = await getCollectionModalData();
+            Promise.resolve(onSave(collectionData));
+            const modal = bootstrap.Modal.getInstance(document.getElementById("collectionModal"));
+            modal.hide();
+        });
+    }
+
+    async function setCollectionElementText(collectionElement, title, size) {
+        const [titleElement, sizeElement] = collectionElement.querySelector("button").children;
+        titleElement.textContent = title ?? titleElement.textContent;
+        sizeElement.textContent = size ?? sizeElement.textContent;
     }
 
     function getIdFromCollectionElement(element) {
@@ -50,7 +73,6 @@ import { Tab } from "../../scripts/Tab.js";
         // for the collapser
         collapseButton.setAttribute("data-bs-target", `#collection-${collection.id}-subelements`);
         collapseButton.setAttribute("aria-controls", `collection-${collection.id}-subelements`);
-        collapseButton.textContent = `${collection.title} | ${collection.tabs.length} tab(s)`;
 
         new bootstrap.Popover(deleteButton);
         deleteButton.addEventListener("shown.bs.popover", async (event) => {
@@ -65,17 +87,11 @@ import { Tab } from "../../scripts/Tab.js";
 
         editButton.addEventListener("click", async (event) => {
             const collectionElement = event.target.parentNode.parentNode;
-            const collection = Collection.fromDB(getIdFromCollectionElement(collectionElement));
-            document.getElementById("collectionModalTitle").value = collection.title;
-            document.getElementById("collectionModalFilters").value = collection.filters.map((filter) => filter.original).join("\n");
-            document.getElementById("collectionModalAllowDuplicates").value = collection.allowDuplicates;
-            document.getElementById("collectionModalSaveButton").addEventListener("click", () => {
-                const title = document.getElementById("collectionModalTitle").value.trim();
-                const filters = document.getElementById("collectionModalFilters").value.trim().split("\n");
-                const allowDuplicates = document.getElementById("collectionModalAllowDuplicates").checked;
-                console.log({ id: collection.id, title: title, filters: filters, allowDuplicates: allowDuplicates });
-                db.collections.put({ id: collection.id, title: title, filters: filters, allowDuplicates: allowDuplicates });
-                collectionElement.querySelector("button").textContent = `${title} | ${collection.tabs.length} tab(s)`;
+            const collection = await Collection.fromDB(getIdFromCollectionElement(collectionElement));
+            await setCollectionModalData(collection);
+            pullUpCollectionModal((collectionData) => {
+                db.collections.update(collectionData.id, { title: collectionData.title, filters: collectionData.filters, allowDuplicates: collectionData.allowDuplicates });
+                setCollectionElementText(collectionElement, collectionData.title);
             });
         });
     }
@@ -143,6 +159,7 @@ import { Tab } from "../../scripts/Tab.js";
     async function getCollectionElement(collection) {
         const collectionElement = collectionElementTemplate.cloneNode(true);
         collectionElement.id = `collection-${collection.id}`;
+        setCollectionElementText(collectionElement, collection.title, collection.tabs.length);
 
         const [collectionHeader, collectionSubelements] = collectionElement.children;
         setCollectionHeader(collection, { collectionHeader: collectionHeader });
@@ -157,47 +174,49 @@ import { Tab } from "../../scripts/Tab.js";
     async function createObservable(collection) {
         const observable = await collection.getObservable();
         observable.subscribe(funcPerformance(
-                async (dbTabs) => {
-                    const collectionElement = document.getElementById(`collection-${observable.collectionId}`);
-                    setCollectionText(collectionElement, dbTabs.length);
+            async (dbTabs) => {
+                if (dbTabs.length === 0)
+                    return;
 
-                    const tbody = collectionElement.querySelector("tbody");
+                const collectionElement = document.getElementById(`collection-${observable.collectionId}`);
+                setCollectionElementText(collectionElement, undefined, dbTabs.length);
 
-                    const pageTabs = [];
-                    const pageTabsIds = new Set();
-                    for (const tab of tbody.children) {
-                        pageTabs.push(tab);
-                        pageTabsIds.add(getIdFromTabElement(tab));
+                const tbody = collectionElement.querySelector("tbody");
+
+                const pageTabs = [];
+                const pageTabsIds = new Set();
+                for (const tab of tbody.children) {
+                    pageTabs.push(tab);
+                    pageTabsIds.add(getIdFromTabElement(tab));
+                }
+
+                const dbTabsIds = new Set(dbTabs.map((tab) => tab.id));
+
+                // tabs which are already in the db but not on the page yet
+                const tabsToAddIds = dbTabsIds.difference(pageTabsIds);
+                // tabs which are still on the page but not in the db already
+                const tabsToRemoveIds = pageTabsIds.difference(dbTabsIds);
+
+                const favicons = await Favicons.getAll();
+                const tabsToAdd = await Promise.all(
+                    dbTabs
+                        .filter((tab) => tabsToAddIds.has(tab.id))
+                        .map((tab) => Tab.fromObject(tab, favicons))
+                );
+                Promise.all(tabsToAdd.map(
+                    async (tab) => {
+                        tbody.append(await getTabElement(tab));
                     }
+                ));
 
-                    const dbTabsIds = new Set(dbTabs.map((tab) => tab.id));
-
-                    // tabs which are already in the db but not on the page yet
-                    const tabsToAddIds = dbTabsIds.difference(pageTabsIds);
-                    // tabs which are still on the page but not in the db already
-                    const tabsToRemoveIds = pageTabsIds.difference(dbTabsIds);
-
-                    const favicons = await Favicons.getAll();
-                    const tabsToAdd = await Promise.all(
-                        dbTabs
-                            .filter((tab) => tabsToAddIds.has(tab.id))
-                            .map((tab) => Tab.fromObject(tab, favicons))
-                    );
-                    Promise.all(tabsToAdd.map(
-                        async (tab) => {
-                            tbody.append(await getTabElement(tab));
-                        }
-                    ));
-
-                    const tabsToRemove = pageTabs.filter(
-                        (tab) => tabsToRemoveIds.has(getIdFromTabElement(tab))
-                    );
-                    for (const tab of tabsToRemove)
-                        tab.remove();
-                },
-                `Collection(${collection.title}) observer`
-            )
-        );
+                const tabsToRemove = pageTabs.filter(
+                    (tab) => tabsToRemoveIds.has(getIdFromTabElement(tab))
+                );
+                for (const tab of tabsToRemove)
+                    tab.remove();
+            },
+            `Collection(${collection.title}) observer`
+        ));
         observables.set(collection.id, observable);
     }
 
@@ -207,7 +226,6 @@ import { Tab } from "../../scripts/Tab.js";
 
     collectionsObservable.subscribe(funcPerformance(
         async (collections) => {
-            observables.clear();
             const collectionsDiv = document.getElementById("collections");
 
             const pageCollections = [];
@@ -244,20 +262,59 @@ import { Tab } from "../../scripts/Tab.js";
     );
 
     async function createCollection() {
-        document.getElementById("collectionModalSaveButton").addEventListener("click", () => {
-            const title = document.getElementById("collectionModalTitle").value.trim();
-            const filters = document.getElementById("collectionModalFilters").value.trim().split("\n");
-            const allowDuplicates = document.getElementById("collectionModalAllowDuplicates").checked;
-            Collection.create(title, filters, allowDuplicates);
-        });
+        document.getElementById("collectionModalTitle").textContent = "Create Collection";
+        pullUpCollectionModal((collectionData) => Collection.create(collectionData.title, collectionData.filters, collectionData.allowDuplicates));
+    }
+
+    async function addFormsValidation() {
+        const forms = document.querySelectorAll(".needs-validation")
+
+        for (const form of forms) {
+            form.addEventListener("submit", (event) => {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                }
+                form.classList.add("was-validated");
+            });
+        }
     }
 
     async function addHandlers() {
         document.getElementById("createCollection").addEventListener("click", createCollection);
+        document.getElementById("hideCollections").addEventListener("click", () => {
+            const collapses = document.getElementById("collections").querySelectorAll(".collapse");
+            for (const collapse of collapses) {
+                bootstrap.Collapse.getOrCreateInstance(collapse).hide();
+            }
+        });
+        document.getElementById("showCollections").addEventListener("click", () => {
+            const collapses = document.getElementById("collections").querySelectorAll(".collapse");
+            for (const collapse of collapses) {
+                bootstrap.Collapse.getOrCreateInstance(collapse).show();
+            }
+        });
+        document.getElementById("collectionModal").addEventListener("hidden.bs.modal", () => {
+            const form = document.getElementById("collectionModalForm");
+            // clear the form
+            form.reset();
+            form.classList.remove("was-validated");
+            // remove all listeners
+            form.replaceWith(form.cloneNode(true));
+            // add validation listener back
+            form.addEventListener("submit", (event) => {
+                if (!form.checkValidity()) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                }
+                form.classList.add("was-validated");
+            });
+        });
     }
 
     async function main() {
-        await addHandlers();
+        addHandlers();
+        addFormsValidation();
     }
 
     document.addEventListener("DOMContentLoaded", main);

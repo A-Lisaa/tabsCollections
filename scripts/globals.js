@@ -16,8 +16,8 @@ export async function openDB() {
     });
 
     db.on("populate", () => {
-        // the default collection is added to the db directly to not import Collection and create import issues with what Colletion.js imports
-        db.collections.add({ title: "default", filters: "/.+/" })
+        // the default collection is added to the db directly to not import Collection and create import issues with what Collection.js imports
+        db.collections.add({ title: "default", filters: ["/.+/"], allowDuplicates: false });
     });
 
     return db;

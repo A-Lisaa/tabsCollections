@@ -32,3 +32,18 @@ export async function escapeRegex(string) {
 export async function unescapeRegex(string) {
     return string.replace(/\\(.)/g, "$1");
 }
+
+export async function getRegexFromString(string) {
+    const expression = string.trim();
+
+    let regex;
+    if (expression.startsWith("/") && expression.endsWith("/")) {
+        // expression is a regex
+        regex = new RegExp(expression.slice(1, -1));
+    }
+    else {
+        // expression is a string
+        regex = new RegExp(await escapeRegex(expression));
+    }
+    return regex;
+}
