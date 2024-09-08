@@ -3,11 +3,12 @@
 import { Logger } from "./Logger.js";
 
 export class Settings {
-    constructor(load = true, logLevel = Logger.Levels.INFO, performanceEnabled = true, fetchUndefinedFavicons = true, cacheFavicons = true) {
+    constructor(load = true, logLevel = Logger.Levels.INFO, performanceEnabled = true, fetchUndefinedFavicons = true, cacheFavicons = true, faviconsCleanupFrequency = 24*60*60*1000) {
         this.logLevel = logLevel;
         this.performanceEnabled = performanceEnabled;
         this.fetchUndefinedFavicons = fetchUndefinedFavicons;
         this.cacheFavicons = cacheFavicons;
+        this.faviconsCleanupFrequency = faviconsCleanupFrequency;
 
         if (load) {
             this.load();

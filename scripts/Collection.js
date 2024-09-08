@@ -7,22 +7,20 @@ import { getRegexFromString } from "./regex.js";
 import { Tab } from "./Tab.js";
 
 export class Collection {
-    constructor(id, title, filters, originalFilters, allowDuplicates, tabs = []) {
+    constructor(id, title, filters, originalFilters, priority, allowDuplicates, tabs = []) {
         this.id = id;
         this.title = title;
         this.filters = filters;
         this.originalFilters = originalFilters;
+        this.priority = priority;
         this.allowDuplicates = allowDuplicates;
         this.tabs = tabs;
 
         instancePerformance(this, this.title);
     }
 
-    static async create(title, filters, allowDuplicates, returnNeeded = false) {
-        const addition = db.collections.add({title: title, filters: filters, allowDuplicates: allowDuplicates });
-        if (!returnNeeded)
-            return;
-        return new Collection(await addition, title, filters, allowDuplicates);
+    static async create(data) {
+        return db.collections.add(data);
     }
 
     static async fromObject(object) {
@@ -35,6 +33,7 @@ export class Collection {
             object.title,
             filters,
             object.filters,
+            object.priority,
             object.allowDuplicates,
             tabs
         );
@@ -51,6 +50,10 @@ export class Collection {
             console.warn(`Could not find collection with id ${id}`);
         }
         return Collection.fromObject(object);
+    }
+
+    static async clear(id) {
+        db.tabs.where({ collectionId: id }).delete();
     }
 
     static async delete(id) {

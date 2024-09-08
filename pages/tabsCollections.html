@@ -22,18 +22,26 @@
                     <div class="modal-body">
                         <div class="mb-3">
                             <label for="collectionModalFormTitle" class="col-form-label">Title</label>
-                            <input type="text" class="form-control" id="collectionModalFormTitle" maxlength="64" required>
+                            <input type="text" id="collectionModalFormTitle" class="form-control" maxlength="64" required>
                             <div class="invalid-feedback">
                                 Please choose a title
                             </div>
                         </div>
                         <div class="mb-3">
                             <label for="collectionModalFormFilters" class="col-form-label">Filters</label>
-                            <textarea class="form-control" id="collectionModalFormFilters" rows="10"></textarea>
-                            <div id="collectionModalFormFiltersHelpBlock" class="form-text">
+                            <textarea id="collectionModalFormFilters" class="form-control" rows="10"></textarea>
+                            <div class="form-text">
                                 Write different filters on separate lines<br>
                                 Encase regex with / (ex.: /.+/)<br>
                                 Lines starting with # are comments and will be skipped when filtering (ex.: # this is a comment)
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="collectionModalFormPriority" class="col-form-label">Priority</label>
+                            <input type="number" id="collectionModalFormPriority" class="form-control" min="-999" max="999" required>
+                            <div class="form-text">
+                                Enter a number between -999 and 999 to set the priority of the collection<br>
+                                A higher number means the collection will be chosen if there are multiple matches for a tab
                             </div>
                         </div>
                         <div class="form-check mb-3">
@@ -60,7 +68,7 @@
                 aria-expanded="true"
                 aria-controls=""
             >
-                <span></span> | <span></span> tab(s)
+                <span></span> | <span></span> tab(s) | Priority: <span></span>
             </button>
             <button
                 class="btn btn-outline-danger rounded-0 ms-1"
@@ -78,15 +86,28 @@
                 Delete
             </button>
             <button
+                class="btn btn-outline-danger rounded-0 ms-1"
+                type="button"
+                data-bs-toggle="popover"
+                data-bs-placement="bottom"
+                data-bs-html="true"
+                data-bs-trigger="focus"
+                data-bs-title="Are you sure?"
+                data-bs-content="
+                    &lt;a class='btn btn-outline-danger rounded-0' type='button'&gt;Yes&lt;/a&gt;
+                    &lt;a class='btn btn-outline-primary rounded-0' type='button'&gt;No&lt;/a&gt;
+                "
+            >
+                Clear
+            </button>
+            <button
                 class="btn btn-outline-primary rounded-0 ms-1"
                 type="button"
-                data-bs-toggle="modal"
-                data-bs-target="#collectionModal"
             >
                 Edit
             </button>
         </div>
-        <div id="collection-${collection.id}-subelements" class="collapse show my-1">
+        <div class="collapse show my-1">
             <table class="table-sort table-arrows table table-sm table-borderless" style="table-layout: fixed;">
                 <thead>
                     <tr>
@@ -129,7 +150,7 @@
         <div class="container-fluid d-flex mx-5">
             <a class="navbar-brand float-start" href="#">Tabs Collections</a>
             <div>
-                <button id="createCollection" class="btn btn-outline-primary rounded-0" type="button" data-bs-toggle="modal" data-bs-target="#collectionModal">Create collection</button>
+                <button id="createCollection" class="btn btn-outline-primary rounded-0" type="button">Create collection</button>
                 <button id="hideCollections" class="btn btn-outline-primary rounded-0" type="button">Hide collections</button>
                 <button id="showCollections" class="btn btn-outline-primary rounded-0" type="button">Show collections</button>
             </div>

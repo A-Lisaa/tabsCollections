@@ -14,7 +14,7 @@ export class Tab {
         this.creationTime = creationTime;
     }
 
-    static async create(collectionId, url, title, favicon, creationTime = new Date(), returnNeeded = false) {
+    static async create(collectionId, url, title, favicon, creationTime = new Date()) {
         let faviconHash;
         if (favicon !== undefined) {
             faviconHash = await Favicons.store(favicon);
@@ -26,12 +26,10 @@ export class Tab {
             faviconHash: faviconHash,
             creationTime: creationTime.getTime(),
         });
-        if (!returnNeeded)
-            return;
         return new Tab(await addition, collectionId, title, favicon, creationTime);
     }
 
-    static async bulkCreate(tabs, returnNeeded = false) {
+    static async bulkCreate(tabs) {
         const hashes = await Favicons.bulkStore(tabs.map((tab) => tab.favicon));
         const prepared = await Promise.all(tabs.map(async (tab, index) => {
             tab.creationTime ??= new Date();
@@ -43,10 +41,6 @@ export class Tab {
                 creationTime: tab.creationTime.getTime(),
             }
         }));
-        if (!returnNeeded) {
-            db.tabs.bulkAdd(prepared);
-            return;
-        }
         const ids = await db.tabs.bulkAdd(prepared, undefined, { allKeys: true });
         return prepared.map((tab, index) => new Tab(ids[index], tab.collectionId, tab.url, tab.title, tabs[index].favicon, tab.creationTime));
     }
@@ -73,7 +67,6 @@ export class Tab {
     }
 
     static async delete(id) {
-        // TODO: check if there are any tabs with the same favicon hash left, if not remove the favicon
         db.tabs.delete(id);
     }
 

@@ -125,16 +125,23 @@ export class Favicons {
     }
 
     static async cleanup() {
-        const [tabs, favicons] = await db.transaction("r", db.tabs, db.favicons, () => {
-            return Promise.all([
+        const lastCleanup = new Date(JSON.parse(localStorage.getItem("lastFaviconsCleanup")));
+        if (new Date() - lastCleanup < settings.faviconsCleanupFrequency)
+            return;
+
+        // TODO: I don't think this works
+        db.transaction("rw", db.tabs, db.favicons, async () => {
+            const [tabs, favicons] = await Promise.all([
                 db.tabs.toArray(),
                 db.favicons.toArray(),
             ]);
+            const hashes = new Set(tabs.map((tab) => tab.faviconHash));
+            const toDelete = favicons.filter((favicon) => !hashes.has(favicon));
+            console.log(await db.favicons.bulkDelete(toDelete));
         });
-        const hashes = new Set(tabs.map((tab) => tab.faviconHash));
-        const toDelete = favicons.filter((favicon) => !hashes.has(favicon));
-        db.favicons.bulkDelete(toDelete);
-        log.info("Favicons cleanup ran");
+
+        localStorage.setItem("lastFaviconsCleanup", JSON.stringify(new Date()));
+        log.info("%cFavicons cleanup ran", "color: #ff66cc");
     }
 
     static {
