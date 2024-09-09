@@ -1,10 +1,8 @@
 "use strict";
 
 import { Collection } from "./Collection.js";
-import { ArrayExtensions } from "./extensions.js";
 import { log } from "./globals.js";
-import { getRegexStability } from "./regex.js";
-import { Tab } from "./Tab.js";
+import { OrphanTab, Tab } from "./Tab.js";
 
 browser.runtime.onInstalled.addListener(() => {
     // TODO: more menus: send and close, send all, send all and close, send to the left/right
@@ -37,58 +35,26 @@ browser.runtime.onInstalled.addListener(() => {
 });
 
 browser.action.onClicked.addListener(async () => {
-    async function getMostSpecificCollections(tab, collections) {
-        const mostSpecificCollections = [];
-        let mostSpecificRegexStability = Infinity;
-        for (const collection of collections) {
-            for (const filter of collection.filters) {
-                let regexStability = await getRegexStability(filter, tab.url);
-                if (regexStability === 0 || regexStability > mostSpecificRegexStability || !filter.test(tab.url))
-                    continue;
-                if (regexStability < mostSpecificRegexStability) {
-                    mostSpecificRegexStability = regexStability;
-                    mostSpecificCollections.length = 0;
-                }
-                mostSpecificCollections.push(collection);
-            }
-        }
-        return mostSpecificCollections;
-    }
-
     const [collections, selectedTabs] = await Promise.all([
         Collection.getAll(),
         browser.tabs.query({ highlighted: true, currentWindow: true }),
     ]);
     const res = [];
-    for (const tab of selectedTabs) {
-        let collectionId;
-        const mostSpecificCollections = await getMostSpecificCollections(tab, collections);
-        if (mostSpecificCollections.length === 0) {
-            log.warn(`No matches found for ${tab.url}`);
+    for (const tabObject of selectedTabs) {
+        const tab = new OrphanTab(tabObject.url, tabObject.title, tabObject.favIconUrl);
+        const matches = await tab.getMatches(collections);
+        if (matches.length === 0 || matches.length > 1)
             continue;
-        }
-        if (mostSpecificCollections.length > 1) {
-            const highestPriorities = ArrayExtensions.getBiggestElements(mostSpecificCollections, (left, right) => left.priority - right.priority);
-            if (highestPriorities.length > 1) {
-                log.warn(`Multiple matches found for ${tab.url} : ${highestPriorities.map(c => c.filters)}`);
-                continue;
-            }
-            collectionId = highestPriorities[0].id;
-        }
-        else {
-            collectionId = mostSpecificCollections[0].id;
-        }
-        const collection = collections.find((c) => c.id === collectionId);
-        if (!collection.allowDuplicates && collection.tabs.some((t) => t.url === tab.url)) {
+
+        const collection = matches[0];
+        if (!await collection.canAdd(tab)) {
             log.info(`%cTab ${tab.url} is already in ${collection.title}`, "color: #ffa500");
             continue;
         }
-        res.push({
-            collectionId: collectionId,
-            url: tab.url,
-            title: tab.title,
-            favicon: tab.favIconUrl
-        });
+
+        tab.collectionId = collection.id;
+        res.push(tab);
+        // TODO: move the log after the tab was created, otherwise it's a bit misleading, the same with the other instance
         log.info(`%cTab ${tab.url} added to ${collection.title}`, "color: Lime");
     }
     Tab.bulkCreate(res);

@@ -1,8 +1,8 @@
 "use strict";
 
-import { ArrayExtensions } from "./extensions.js";
+import { ArrayExtensions } from "../utility/extensions.js";
+import { createCallStack, isThenable } from "../utility/utility.js";
 import { log, settings } from "./globals.js";
-import { createCallStack, isThenable } from "./utility.js";
 
 // while performanceEnabled should be taken from global settings, global settings may not have been initialized by the time when the function is called
 export function funcPerformance(func, funcName = func.name, thisArg = undefined, performanceEnabled = settings.performanceEnabled) {

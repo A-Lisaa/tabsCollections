@@ -1,7 +1,7 @@
 "use strict";
 
 import { Dexie } from "../modules/dexie.min.js";
-import { Logger } from "./Logger.js";
+import { Logger } from "../utility/Logger.js";
 import { Settings } from "./Settings.js";
 
 export async function openDB() {

@@ -1,10 +1,10 @@
 "use strict";
 
 import { liveQuery } from "../../modules/dexie.min.js";
+import { getRegexFromString } from "../utility/regex.js";
 import { db } from "./globals.js";
 import { classPerformance, instancePerformance } from "./profiler.js";
-import { getRegexFromString } from "./regex.js";
-import { Tab } from "./Tab.js";
+import { OrphanTab, Tab } from "./Tab.js";
 
 export class Collection {
     constructor(id, title, filters, originalFilters, priority, allowDuplicates, tabs = []) {
@@ -19,11 +19,52 @@ export class Collection {
         instancePerformance(this, this.title);
     }
 
-    static async create(data) {
-        return db.collections.add(data);
+    async getObservable() {
+        const query = liveQuery(
+            () => db.tabs.where({collectionId: this.id}).toArray()
+        );
+        query.collectionId = this.id;
+        return query;
     }
 
-    static async fromObject(object) {
+    async canAdd(tab) {
+        return this.allowDuplicates || !this.tabs.some((t) => t.url === tab.url);
+    }
+
+    async asTabsList() {
+        const res = "";
+        for (const tab of this.tabs) {
+            res += `${tab.url} | ${tab.title}\n`;
+        }
+        return res;
+    }
+
+    toJSON() {
+        return {
+            title: this.title,
+            filters: this.originalFilters,
+            priority: this.priority,
+            allowDuplicates: this.allowDuplicates,
+            tabs: this.tabs
+        };
+    }
+
+    async populateFromTabsList(tabs) {
+        const res = [];
+        for (const tabString of tabs) {
+            const [url, title] = tabString.split("|");
+            const tab = new OrphanTab(url.trim(), title !== undefined ? title.trim() : undefined);
+            if (!await this.canAdd(tab)) {
+                log.info(`%cTab ${tab.url} is already in ${this.title}`, "color: #ffa500");
+                continue;
+            }
+            res.push({ collectionId: this.id, url: tab.url, title: tab.title });
+            log.info(`%cTab ${tab.url} added to ${this.title}`, "color: Lime");
+        }
+        Tab.bulkCreate(res);
+    }
+
+    static async fromDBObject(object) {
         const [tabs, filters] = await Promise.all([
             Tab.getCollectionTabs(object.id),
             Promise.all(object.filters.filter((filter) => !filter.trim().startsWith("#")).map((filter) => getRegexFromString(filter)))
@@ -39,9 +80,30 @@ export class Collection {
         );
     }
 
-    static async getAll() {
-        const collections = await db.collections.toArray();
-        return Promise.all(collections.map((collectionObject) => Collection.fromObject(collectionObject)));
+    // data = {title, filters, priority, allowDuplicates}
+    static async create(data) {
+        data.id = await db.collections.add(data);
+        return Collection.fromDBObject(data);
+    }
+
+    static async fromJSON(json) {
+        // TODO: behaviour when the collection exists and/or has duplicates
+        const collection = await Collection.create({
+            title: json.title,
+            filters: json.filters,
+            priority: json.priority,
+            allowDuplicates: json.allowDuplicates
+        });
+        Tab.bulkFromJSON(json.tabs.map((tab) => {
+            return {
+                collectionId: collection.id,
+                url: tab.url,
+                title: tab.title,
+                favicon: tab.favicon,
+                creationTime: tab.creationTime
+            }
+        }));
+        return collection;
     }
 
     static async fromDB(id) {
@@ -49,7 +111,12 @@ export class Collection {
         if (object === undefined) {
             console.warn(`Could not find collection with id ${id}`);
         }
-        return Collection.fromObject(object);
+        return Collection.fromDBObject(object);
+    }
+
+    static async getAll() {
+        const collections = await db.collections.toArray();
+        return Promise.all(collections.map((collectionObject) => Collection.fromDBObject(collectionObject)));
     }
 
     static async clear(id) {
@@ -57,16 +124,8 @@ export class Collection {
     }
 
     static async delete(id) {
-        db.tabs.where({ collectionId: id }).delete();
+        Collection.clear(id);
         db.collections.delete(id);
-    }
-
-    async getObservable() {
-        const query = liveQuery(
-            () => db.tabs.where({collectionId: this.id}).toArray()
-        );
-        query.collectionId = this.id;
-        return query;
     }
 
     static {

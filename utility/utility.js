@@ -31,3 +31,13 @@ export function createCallStack() {
 export function isThenable(obj) {
     return obj["then"] !== undefined;
 }
+
+export async function resizeImage(image, width, height) {
+    const canvas = new OffscreenCanvas(width, height);
+    const context = canvas.getContext("2d");
+    const img = new Image(width, height);
+    img.src = image;
+    await img.decode();
+    context.drawImage(img, 0, 0, width, height);
+    return canvas.convertToBlob();
+}
