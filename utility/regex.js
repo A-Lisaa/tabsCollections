@@ -1,7 +1,7 @@
 "use strict";
 
 // less regex stability = more specific the regex is
-export async function getRegexStability(regex, string) {
+export function getRegexStability(regex, string) {
     let matchesCount = 0;
     for (let i = 0; i < string.length; i++) {
         let substring = string.slice(0, i) + string.slice(i + 1, string.length);
@@ -10,11 +10,11 @@ export async function getRegexStability(regex, string) {
     return matchesCount;
 }
 
-export async function getMostSpecificRegexes(regexes, string) {
+export function getMostSpecificRegexes(regexes, string) {
     let mostSpecificRegexStability = Infinity;
     const mostSpecificRegexes = [];
     for (const regex of regexes) {
-        let regexStability = await getRegexStability(regex, string);
+        let regexStability = getRegexStability(regex, string);
         if (regexStability === 0 || regexStability > mostSpecificRegexStability)
             continue;
         if (regexStability < mostSpecificRegexStability) {
@@ -25,15 +25,15 @@ export async function getMostSpecificRegexes(regexes, string) {
     }
 }
 
-export async function escapeRegex(string) {
+export function escapeRegex(string) {
     return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export async function unescapeRegex(string) {
+export function unescapeRegex(string) {
     return string.replace(/\\(.)/g, "$1");
 }
 
-export async function getRegexFromString(string) {
+export function getRegexFromString(string) {
     const expression = string.trim();
 
     let regex;
@@ -43,7 +43,7 @@ export async function getRegexFromString(string) {
     }
     else {
         // expression is a string
-        regex = new RegExp(await escapeRegex(expression));
+        regex = new RegExp(escapeRegex(expression));
     }
     return regex;
 }

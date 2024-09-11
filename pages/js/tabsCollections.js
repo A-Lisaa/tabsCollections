@@ -2,16 +2,17 @@
 
 import { liveQuery } from "../../modules/dexie.min.js";
 import { Collection } from "../../scripts/Collection.js";
-import { Favicon } from "../../scripts/Favicon.js";
 import { db } from "../../scripts/globals.js";
 import { exportAsCollectionsJSON, exportAsTabsList, importAsCollectionsJSON, importAsTabsList } from "../../scripts/importExport.js";
 import { funcPerformance } from "../../scripts/profiler.js";
 import { Tab } from "../../scripts/Tab.js";
 
 (async function() {
+    // TODO: maybe change querySelector* to getElement*?
+    // TODO: add counter of all tabs to the top
     //#region Utility
     // event = shown.bs.popover on element
-    async function yesNoPopover(element, yes, no = (event) => {}) {
+    function yesNoPopover(element, yes, no = (event) => {}) {
         new bootstrap.Popover(element);
         element.addEventListener("shown.bs.popover", (event) => {
             const popover = document.getElementById(event.target.attributes["aria-describedby"].value);
@@ -29,7 +30,7 @@ import { Tab } from "../../scripts/Tab.js";
     //#endregion
 
     //#region CollectionElement
-    async function getCollectionElementTemplate() {
+    function getCollectionElementTemplate() {
         // for now assume font size is always the same
         const fontSize = 8;
         const collectionElementTemplate = document.getElementById("collectionTemplate").cloneNode(true);
@@ -42,7 +43,7 @@ import { Tab } from "../../scripts/Tab.js";
         return collectionElementTemplate;
     }
 
-    async function getTabTemplate() {
+    function getTabTemplate() {
         const tabTemplate = document.getElementById("tabTemplate").cloneNode(true);
         tabTemplate.removeAttribute("id");
         tabTemplate.removeAttribute("aria-hidden");
@@ -50,12 +51,10 @@ import { Tab } from "../../scripts/Tab.js";
         return tabTemplate;
     }
 
-    const [tabTemplate, collectionElementTemplate] = await Promise.all([
-        getTabTemplate(),
-        getCollectionElementTemplate()
-    ]);
+    const tabTemplate = getTabTemplate();
+    const collectionElementTemplate = getCollectionElementTemplate();
 
-    async function setCollectionElementText(collectionElement, parts = {
+    function setCollectionElementText(collectionElement, parts = {
         title: undefined,
         size: undefined,
         priority: undefined
@@ -70,7 +69,7 @@ import { Tab } from "../../scripts/Tab.js";
         return parseInt(element.id.split("-")[1]);
     }
 
-    async function setCollectionHeader(collection, { collectionHeader }) {
+    function setCollectionHeader(collection, collectionHeader) {
         const [collapseButton, deleteButton, clearButton, editButton] = collectionHeader.children;
 
         collapseButton.setAttribute("data-bs-target", `#collection-${collection.id}-subelements`);
@@ -80,9 +79,10 @@ import { Tab } from "../../scripts/Tab.js";
 
         yesNoPopover(clearButton, (event) => Collection.clear(getIdFromCollectionElement(event.target.parentNode.parentNode)));
 
+        // TODO: change the collection's elements after edit
         editButton.addEventListener("click", async (event) => {
             const collectionElement = event.target.parentNode.parentNode;
-            const collection = await Collection.fromDB(getIdFromCollectionElement(collectionElement));
+            const collection = await Collection.get(getIdFromCollectionElement(collectionElement), false);
             showCollectionModal(collectionElement, {
                 modalTitle: `Collection ${collection.id}`,
                 title: collection.title,
@@ -97,7 +97,7 @@ import { Tab } from "../../scripts/Tab.js";
         return parseInt(element.id.split("-")[1]);
     }
 
-    async function getTabElement(tab) {
+    function getTabElement(tab) {
         const row = tabTemplate.cloneNode(true);
         row.id = `tab-${tab.id}`;
 
@@ -110,24 +110,18 @@ import { Tab } from "../../scripts/Tab.js";
 
         const [closeButton, favicon, title, url, creationTime] = row.children;
 
-        closeButton.firstElementChild.addEventListener("click", async (event) => Tab.delete(getIdFromTabElement(event.target.closest("tr"))));
+        closeButton.firstElementChild.addEventListener("click", (event) => Tab.delete(getIdFromTabElement(event.target.closest("tr"))));
 
-        if (tab.favicon !== undefined) {
-            try {
-                favicon.firstElementChild.src = tab.favicon.url;
-            }
-            finally {
-                tab.favicon.release();
-            }
+        try {
+            favicon.firstElementChild.src = tab.favicon.url;
         }
-        else {
-            favicon.firstElementChild.src = "";
+        finally {
+            tab.favicon.release();
         }
 
         const titleAnchor = title.firstElementChild;
         titleAnchor.href = tab.url;
         titleAnchor.textContent = tab.title ?? "No title";
-        // for the tooltip
         titleAnchor.setAttribute("data-bs-title", titleAnchor.textContent);
         new bootstrap.Tooltip(titleAnchor);
 
@@ -143,18 +137,18 @@ import { Tab } from "../../scripts/Tab.js";
         return row;
     }
 
-    async function setCollectionSubelements(collection, { collectionSubelements }) {
+    function setCollectionSubelements(collection, collectionSubelements) {
         collectionSubelements.id = `collection-${collection.id}-subelements`;
     }
 
-    async function getCollectionElement(collection) {
+    function getCollectionElement(collection) {
         const collectionElement = collectionElementTemplate.cloneNode(true);
         collectionElement.id = `collection-${collection.id}`;
         setCollectionElementText(collectionElement, { title: collection.title, size: collection.tabs.length, priority: collection.priority });
 
         const [collectionHeader, collectionSubelements] = collectionElement.children;
-        setCollectionHeader(collection, { collectionHeader: collectionHeader });
-        setCollectionSubelements(collection, { collectionSubelements: collectionSubelements });
+        setCollectionHeader(collection, collectionHeader);
+        setCollectionSubelements(collection, collectionSubelements);
 
         collectionElement.addEventListener("collectionUpdated", (event) => {
             db.collections.update(getIdFromCollectionElement(event.target), event.detail);
@@ -166,12 +160,13 @@ import { Tab } from "../../scripts/Tab.js";
     //#endregion
 
     //#region Observables
+    // ! Observables shouldn't make any changes to the db, they're read-only
     const observables = new Map();
 
-    async function createObservable(collection) {
-        const observable = await collection.getObservable();
+    function createObservable(collection) {
+        const observable = collection.getObservable();
         observable.subscribe(funcPerformance(
-            async (dbTabs) => {
+            (dbTabs) => {
                 const collectionElement = document.getElementById(`collection-${observable.collectionId}`);
                 if (collectionElement === null) {
                     return;
@@ -195,21 +190,13 @@ import { Tab } from "../../scripts/Tab.js";
                 // tabs which are still on the page but not in the db already
                 const tabsToRemoveIds = pageTabsIds.difference(dbTabsIds);
 
-                const favicons = await Favicon.getAll();
-                const tabsToAdd = await Promise.all(
-                    dbTabs
-                        .filter((tab) => tabsToAddIds.has(tab.id))
-                        .map((tab) => Tab.fromDBObject(tab, favicons))
-                );
-                Promise.all(tabsToAdd.map(
-                    async (tab) => {
-                        tbody.append(await getTabElement(tab));
-                    }
-                ));
+                const tabsToAdd = dbTabs
+                    .filter((tab) => tabsToAddIds.has(tab.id))
+                    .map((tab) => Tab.fromDBObject(tab));
+                tbody.append(...tabsToAdd.map((tab) => getTabElement(tab)));
 
-                const tabsToRemove = pageTabs.filter(
-                    (tab) => tabsToRemoveIds.has(getIdFromTabElement(tab))
-                );
+                const tabsToRemove = pageTabs
+                    .filter((tab) => tabsToRemoveIds.has(getIdFromTabElement(tab)));
                 for (const tab of tabsToRemove)
                     tab.remove();
             },
@@ -218,9 +205,7 @@ import { Tab } from "../../scripts/Tab.js";
         observables.set(collection.id, observable);
     }
 
-    const collectionsObservable = liveQuery(
-        () => db.collections.toArray()
-    );
+    const collectionsObservable = liveQuery(() => db.collections.toArray());
 
     collectionsObservable.subscribe(funcPerformance(
         async (collections) => {
@@ -238,15 +223,13 @@ import { Tab } from "../../scripts/Tab.js";
             const collectionsToAddIds = dbCollectionsIds.difference(pageCollectionsIds);
             const collectionsToRemoveIds = pageCollectionsIds.difference(dbCollectionsIds);
 
-            const collectionsToAdd = await Promise.all(
-                collections
-                    .filter((collection) => collectionsToAddIds.has(collection.id))
-                    .map((collectionObject) => Collection.fromDBObject(collectionObject))
-            );
-            Promise.all(collectionsToAdd.map(async (collection) => {
-                collectionsDiv.append(await getCollectionElement(collection));
+            const collectionsToAdd = collections
+                .filter((collection) => collectionsToAddIds.has(collection.id))
+                .map((collectionObject) => Collection.fromDBObject(collectionObject));
+            for (const collection of collectionsToAdd) {
+                collectionsDiv.append(getCollectionElement(collection));
                 createObservable(collection);
-            }));
+            }
 
             for (const collection of pageCollections) {
                 const collectionId = getIdFromCollectionElement(collection);
@@ -261,7 +244,7 @@ import { Tab } from "../../scripts/Tab.js";
     //#endregion
 
     //#region CollectionModal
-    async function setCollectionModalData(data) {
+    function setCollectionModalData(data) {
         document.getElementById("collectionModalTitle").textContent = data.modalTitle;
         document.getElementById("collectionModalFormTitle").value = data.title;
         document.getElementById("collectionModalFormFilters").value = data.filters.join("\n");
@@ -269,7 +252,7 @@ import { Tab } from "../../scripts/Tab.js";
         document.getElementById("collectionModalFormAllowDuplicates").checked = data.allowDuplicates;
     }
 
-    async function getCollectionModalData() {
+    function getCollectionModalData() {
         return {
             title: document.getElementById("collectionModalFormTitle").value.trim(),
             filters: document.getElementById("collectionModalFormFilters").value.trim().split("\n"),
@@ -278,9 +261,26 @@ import { Tab } from "../../scripts/Tab.js";
         };
     }
 
-    async function showCollectionModal(collectionElement, collectionModalData) {
+    function showCollectionModal(collectionElement, collectionModalData) {
         const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("collectionModal"));
-        await setCollectionModalData({
+
+        let form = document.getElementById("collectionModalForm");
+        // clear the form
+        form.classList.remove("was-validated");
+        // replace the form with its clone to remove all listeners
+        const newForm = form.cloneNode(true)
+        form.replaceWith(newForm);
+        form = newForm;
+        // add validation listener back
+        form.addEventListener("submit", (event) => {
+            if (!event.target.checkValidity()) {
+                event.preventDefault();
+                event.stopImmediatePropagation();
+            }
+            event.target.classList.add("was-validated");
+        });
+
+        setCollectionModalData({
             modalTitle: collectionModalData.modalTitle ?? "",
             title: collectionModalData.title ?? "",
             filters: collectionModalData.filters ?? [],
@@ -288,7 +288,7 @@ import { Tab } from "../../scripts/Tab.js";
             allowDuplicates: collectionModalData.allowDuplicates ?? false,
         });
         document.getElementById("collectionModalForm").addEventListener("submit", async () => {
-            const collectionData = await getCollectionModalData();
+            const collectionData = getCollectionModalData();
             if (collectionElement === undefined) {
                 document.getElementById("collections").dispatchEvent(
                     new CustomEvent("collectionCreated", {
@@ -309,21 +309,61 @@ import { Tab } from "../../scripts/Tab.js";
     }
     //#endregion
 
-    async function addFormsValidation() {
-        const forms = document.querySelectorAll(".needs-validation")
+    //#region ImportExport
+    async function getImportTypeTemplate() {
+        const el = document.getElementById("importModalTypeTemplate").cloneNode(true);
+        el.removeAttribute("id");
+        el.classList.remove("d-none");
+        return el;
+    }
+    const importTypeTemplate = await getImportTypeTemplate();
 
-        for (const form of forms) {
-            form.addEventListener("submit", (event) => {
-                if (!event.target.checkValidity()) {
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                }
-                event.target.classList.add("was-validated");
+    async function showImportModal(types) {
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("importModal"));
+        const typesElement = document.getElementById("importModalTypes");
+        const typesElements = [];
+        for (const [typeName, typeAction] of types.entries()) {
+            let typeElement = importTypeTemplate.cloneNode(true);
+            typeElement.textContent = typeName;
+            typeElement.addEventListener("click", () => {
+                const input = document.getElementById("importModalTextarea").value;
+                Promise.resolve(typeAction(input));
+                modal.hide();
             });
+            typesElements.push(typeElement);
         }
+        typesElement.replaceChildren(...typesElements);
+        document.getElementById("importModalTextarea").value = "";
+        modal.show();
     }
 
-    async function addHandlers() {
+    async function getExportTypeTemplate() {
+        const el = document.getElementById("exportModalTypeTemplate").cloneNode(true);
+        el.removeAttribute("id");
+        el.classList.remove("d-none");
+        return el;
+    }
+    const exportTypeTemplate = await getExportTypeTemplate();
+
+    async function showExportModal(types) {
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("exportModal"));
+        const typesElement = document.getElementById("exportModalTypes");
+        const typesElements = [];
+        for (const [typeName, typeAction] of types.entries()) {
+            let typeElement = exportTypeTemplate.cloneNode(true);
+            typeElement.textContent = typeName;
+            typeElement.addEventListener("click", () => {
+                Promise.resolve(typeAction());
+            });
+            typesElements.push(typeElement);
+        }
+        typesElement.replaceChildren(...typesElements);
+        document.getElementById("exportModalTextarea").value = "";
+        modal.show();
+    }
+    //#endregion
+
+    function addHandlers() {
         document.getElementById("createCollectionButton").addEventListener("click", () => {
             showCollectionModal(undefined, { modalTitle: "Create Collection" });
         });
@@ -341,70 +381,42 @@ import { Tab } from "../../scripts/Tab.js";
         });
 
         document.getElementById("importButton").addEventListener("click", () => {
-            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("importModal"));
-            modal.show();
-        });
-        document.getElementById("importModal").querySelector("form").addEventListener("submit", async () => {
-            const asTabsList = document.getElementById("importModalTypeTabsList").checked;
-            const asCollectionsJSON = document.getElementById("importModalTypeCollectionsJSON").checked;
-            const input = document.getElementById("importModalTextarea").value;
-            if (asTabsList)
-                await importAsTabsList(input.split("\n"));
-            else if (asCollectionsJSON)
-                await importAsCollectionsJSON(input);
-            const modal = bootstrap.Modal.getInstance(document.getElementById("importModal"));
-            modal.hide();
-        });
-        document.getElementById("importModal").addEventListener("hidden.bs.modal", async (event) => {
-            const form = event.target.querySelector("form");
-            form.reset();
+            showImportModal(new Map([
+                ["Tabs List", async (input) => {
+                    await importAsTabsList(input.trim().split("\n"));
+                }],
+                ["Collections JSON", async (input) => {
+                    await importAsCollectionsJSON(JSON.parse(input));
+                }]
+            ]));
         });
 
-        document.getElementById("exportModalTypeTabsList").addEventListener("click", async () => {
-            const output = document.getElementById("exportModalTextarea");
-            output.value = await exportAsTabsList();
-        });
-        document.getElementById("exportModalTypeCollectionsJSON").addEventListener("click", async () => {
-            const output = document.getElementById("exportModalTextarea");
-            output.value = await exportAsCollectionsJSON();
-        });
-        document.getElementById("exportModal").addEventListener("hidden.bs.modal", async () => {
-            document.getElementById("exportModalTextarea").value = "";
-        });
-
-        document.getElementById("collections").addEventListener("collectionCreated", (event) => {
-            Collection.create(event.detail);
+        document.getElementById("exportButton").addEventListener("click", () => {
+            showExportModal(new Map([
+                ["Tabs List", async () => {
+                    document.getElementById("exportModalTextarea").value = await exportAsTabsList();
+                }],
+                ["Collections JSON", async () => {
+                    document.getElementById("exportModalTextarea").value = await exportAsCollectionsJSON();
+                }]
+            ]));
         });
 
-        document.getElementById("collectionModal").addEventListener("hidden.bs.modal", (event) => {
-            let form = document.getElementById("collectionModalForm");
-            // clear the form
-            form.reset();
-            form.classList.remove("was-validated");
-            // replace the form with its clone to remove all listeners
-            const newForm = form.cloneNode(true)
-            form.replaceWith(newForm);
-            form = newForm;
-            // add validation listener back
-            form.addEventListener("submit", (event) => {
-                if (!event.target.checkValidity()) {
-                    event.preventDefault();
-                    event.stopImmediatePropagation();
-                }
-                event.target.classList.add("was-validated");
-            });
+        document.getElementById("collections").addEventListener("collectionCreated", async (event) => {
+            const data = event.detail;
+            const collection = new Collection(data.title, data.filters, data.priority, data.allowDuplicates);
+            await collection.save();
         });
 
-        document.addEventListener("visibilitychange", () => {
-            if (document.hidden) {
-                Favicon.cleanup();
-            }
-        });
+        // document.addEventListener("visibilitychange", () => {
+        //     if (document.hidden) {
+        //         Favicon.cleanup();
+        //     }
+        // });
     }
 
-    async function main() {
+    function main() {
         addHandlers();
-        addFormsValidation();
     }
 
     document.addEventListener("DOMContentLoaded", main);

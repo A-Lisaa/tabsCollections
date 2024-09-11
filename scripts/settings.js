@@ -5,16 +5,14 @@ import { Logger } from "../utility/Logger.js";
 export class Settings {
     constructor(load = true,
         logLevel = Logger.Levels.INFO,
-        performanceEnabled = true,
+        performanceEnabled = false,
         fetchUndefinedFavicons = true,
-        cacheFavicons = true,
         faviconsCleanupFrequency = 24*60*60*1000,
         faviconsSize = 16
     ) {
         this.logLevel = logLevel;
         this.performanceEnabled = performanceEnabled;
         this.fetchUndefinedFavicons = fetchUndefinedFavicons;
-        this.cacheFavicons = cacheFavicons;
         this.faviconsCleanupFrequency = faviconsCleanupFrequency;
         this.faviconsSize = faviconsSize;
 
