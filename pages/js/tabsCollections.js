@@ -8,8 +8,6 @@ import { funcPerformance } from "../../scripts/profiler.js";
 import { Tab } from "../../scripts/Tab.js";
 
 (async function() {
-    // TODO: maybe change querySelector* to getElement*?
-    // TODO: add counter of all tabs to the top
     //#region Utility
     // event = shown.bs.popover on element
     function yesNoPopover(element, yes, no = (event) => {}) {

@@ -77,7 +77,7 @@ export class Favicon {
             return new Favicon(hash);
 
         if (favicon.startsWith("data:image")) {
-            favicon = resizeImage(favicon, settings.faviconsSize, settings.faviconsSize);
+            favicon = resizeImage(favicon);
             favicon = await favicon.arrayBuffer();
         }
 
@@ -104,7 +104,7 @@ export class Favicon {
 
 
             if (favicon.startsWith("data:image")) {
-                favicon = await resizeImage(favicon, settings.faviconsSize, settings.faviconsSize);
+                favicon = await resizeImage(favicon);
                 favicon = await favicon.arrayBuffer();
             }
 

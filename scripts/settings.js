@@ -2,19 +2,29 @@
 
 import { Logger } from "../utility/Logger.js";
 
+export class Setting {
+    getInputElement(template) {
+        throw new Error("Not implemented");
+    }
+}
+
+export class CheckboxSetting extends Setting {
+    getInputElement() {
+        return this.element.querySelector("input[type='checkbox']");
+    }
+}
+
 export class Settings {
     constructor(load = true,
         logLevel = Logger.Levels.INFO,
         performanceEnabled = false,
         fetchUndefinedFavicons = true,
         faviconsCleanupFrequency = 24*60*60*1000,
-        faviconsSize = 16
     ) {
         this.logLevel = logLevel;
         this.performanceEnabled = performanceEnabled;
         this.fetchUndefinedFavicons = fetchUndefinedFavicons;
         this.faviconsCleanupFrequency = faviconsCleanupFrequency;
-        this.faviconsSize = faviconsSize;
 
         if (load) {
             this.load();
