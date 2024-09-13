@@ -2,10 +2,11 @@
 
 import { liveQuery } from "../../modules/dexie.min.js";
 import { Collection } from "../../scripts/Collection.js";
-import { db } from "../../scripts/globals.js";
-import { exportAsCollectionsJSON, exportAsTabsList, importAsCollectionsJSON, importAsTabsList } from "../../scripts/importExport.js";
+import { db, settings } from "../../scripts/globals.js";
+import { exportAsCollectionsJSON, exportAsTabsJSON, exportAsTabsList, importAsCollectionsJSON, importAsTabsJSON, importAsTabsList } from "../../scripts/importExport.js";
 import { funcPerformance } from "../../scripts/profiler.js";
 import { Tab } from "../../scripts/Tab.js";
+import { RandomExtensions } from "../../utility/extensions.js";
 
 (async function() {
     //#region Utility
@@ -16,11 +17,11 @@ import { Tab } from "../../scripts/Tab.js";
             const popover = document.getElementById(event.target.attributes["aria-describedby"].value);
             const [buttonYes, buttonNo] = popover.querySelectorAll("a");
             buttonYes.addEventListener("click", () => {
-                Promise.resolve(yes(event));
+                yes(event);
                 element.click();
             });
             buttonNo.addEventListener("click", () => {
-                Promise.resolve(no(event));
+                no(event);
                 element.click();
             });
         });
@@ -68,16 +69,45 @@ import { Tab } from "../../scripts/Tab.js";
     }
 
     function setCollectionHeader(collection, collectionHeader) {
-        const [collapseButton, deleteButton, clearButton, editButton] = collectionHeader.children;
+        const [collapseButton, importButton, exportButton, deleteButton, clearButton, editButton] = collectionHeader.children;
 
         collapseButton.setAttribute("data-bs-target", `#collection-${collection.id}-subelements`);
         collapseButton.setAttribute("aria-controls", `collection-${collection.id}-subelements`);
+
+        importButton.addEventListener("click", async (event) => {
+            const collectionId = getIdFromCollectionElement(event.target.parentNode.parentNode);
+            const collection = await Collection.get(collectionId);
+            showImportModal(new Map([
+                ["Tabs List", (input) => {
+                    collection.populateFromTabsList(input.trim().split("\n"));
+                }],
+                ["Tabs JSON", (input) => {
+                    collection.populateFromTabsJSON(JSON.parse(input));
+                }],
+            ]));
+        });
+
+        exportButton.addEventListener("click", async (event) => {
+            const collectionId = getIdFromCollectionElement(event.target.parentNode.parentNode);
+            const collection = await Collection.get(collectionId);
+            showExportModal(new Map([
+                ["Tabs List", () => {
+                    document.getElementById("exportModalTextarea").value = collection.asTabsList();
+                }],
+                ["Tabs JSON", () => {
+                    document.getElementById("exportModalTextarea").value = collection.asTabsJSON();
+                }],
+                ["Collection JSON", () => {
+                    document.getElementById("exportModalTextarea").value = collection.asJSON();
+                }]
+            ]));
+        });
 
         yesNoPopover(deleteButton, (event) => Collection.delete(getIdFromCollectionElement(event.target.parentNode.parentNode)));
 
         yesNoPopover(clearButton, (event) => Collection.clear(getIdFromCollectionElement(event.target.parentNode.parentNode)));
 
-        // TODO: change the collection's elements after edit
+        // TODO: Low priority (just export into another collection): change the collection's elements after edit
         editButton.addEventListener("click", async (event) => {
             const collectionElement = event.target.parentNode.parentNode;
             const collection = await Collection.get(getIdFromCollectionElement(collectionElement), false);
@@ -316,16 +346,16 @@ import { Tab } from "../../scripts/Tab.js";
     }
     const importTypeTemplate = await getImportTypeTemplate();
 
-    async function showImportModal(types) {
+    async function showImportModal(importTypes) {
         const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("importModal"));
         const typesElement = document.getElementById("importModalTypes");
         const typesElements = [];
-        for (const [typeName, typeAction] of types.entries()) {
+        for (const [typeName, typeAction] of importTypes.entries()) {
             let typeElement = importTypeTemplate.cloneNode(true);
             typeElement.textContent = typeName;
             typeElement.addEventListener("click", () => {
                 const input = document.getElementById("importModalTextarea").value;
-                Promise.resolve(typeAction(input));
+                typeAction(input);
                 modal.hide();
             });
             typesElements.push(typeElement);
@@ -343,20 +373,150 @@ import { Tab } from "../../scripts/Tab.js";
     }
     const exportTypeTemplate = await getExportTypeTemplate();
 
-    async function showExportModal(types) {
+    async function showExportModal(exportTypes) {
         const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById("exportModal"));
         const typesElement = document.getElementById("exportModalTypes");
         const typesElements = [];
-        for (const [typeName, typeAction] of types.entries()) {
+        for (const [typeName, typeAction] of exportTypes.entries()) {
             let typeElement = exportTypeTemplate.cloneNode(true);
             typeElement.textContent = typeName;
             typeElement.addEventListener("click", () => {
-                Promise.resolve(typeAction());
+                typeAction();
             });
             typesElements.push(typeElement);
         }
         typesElement.replaceChildren(...typesElements);
         document.getElementById("exportModalTextarea").value = "";
+        modal.show();
+    }
+    //#endregion
+
+    //#region Settings
+    function getSettingElement(templateId) {
+        const template = document.getElementById(templateId).cloneNode(true);
+        template.removeAttribute("id");
+        template.classList.remove("d-none");
+        return template;
+    }
+
+    function getSettingElementParts(element) {
+        const value = element.querySelector(".value");
+        const name = element.querySelector(".name");
+        const description = element.querySelector(".description");
+        const defaultButton = element.querySelector(".default-btn");
+        return [value, name, description, defaultButton];
+    }
+
+    const settingsTypes = new Map([
+        ["BoolSetting", (setting) => {
+            const element = getSettingElement("switchSettingTemplate");
+            const [value, name, description, defaultButton] = getSettingElementParts(element);
+            const id = `setting-${RandomExtensions.randint(0, 1000000)}`;
+            value.id = id;
+            value.checked = setting.value;
+            name.htmlFor = id;
+            name.textContent = setting.name;
+            description.textContent = setting.description;
+            defaultButton.addEventListener("click", () => {
+                value.checked = setting.defaultValue;
+            });
+            return element;
+        }],
+        ["NumberSetting", (setting) => {
+            const element = getSettingElement("numberSettingTemplate");
+            const [value, name, description, defaultButton] = getSettingElementParts(element);
+            const id = `setting-${RandomExtensions.randint(0, 1000000)}`;
+            value.id = id;
+            value.min = setting.min;
+            value.max = setting.max;
+            value.value = setting.value;
+            name.htmlFor = id;
+            name.textContent = setting.name;
+            description.textContent = setting.description;
+            defaultButton.addEventListener("click", () => {
+                value.value = setting.defaultValue;
+            });
+            return element;
+        }],
+        ["StringSetting", (setting) => {
+            const element = getSettingElement("stringSettingTemplate");
+            const [value, name, description, defaultButton] = getSettingElementParts(element);
+            const id = `setting-${RandomExtensions.randint(0, 1000000)}`;
+            value.id = id;
+            value.minLength = setting.minLength;
+            value.maxLength = setting.maxLength;
+            value.pattern = setting.pattern;
+            value.value = setting.value;
+            name.htmlFor = id;
+            name.textContent = setting.name;
+            description.textContent = setting.description;
+            defaultButton.addEventListener("click", () => {
+                value.value = setting.defaultValue;
+            });
+            return element;
+        }],
+        ["SingleValuesSetting", (setting) => {
+            const element = getSettingElement("selectSettingTemplate");
+            const optionTemplate = element.querySelector("option").cloneNode(true);
+            const [value, name, description, defaultButton] = getSettingElementParts(element);
+            const possibleValues = [];
+            for (const possibleValue of setting.possibleValues) {
+                const option = optionTemplate.cloneNode(true);
+                option.value = possibleValue;
+                option.textContent = possibleValue;
+                if (setting.value === possibleValue)
+                    option.selected = true;
+                possibleValues.push(option);
+            }
+            value.replaceChildren(...possibleValues);
+            name.textContent = setting.name;
+            description.textContent = setting.description;
+            defaultButton.addEventListener("click", () => {
+                value.querySelector(`[value=${setting.defaultValue}]`).selected = true;
+            });
+            return element;
+        }]
+    ]);
+
+    const settingsValues = new Map([
+        ["BoolSetting", (element) => {
+            return element.querySelector(".value").checked;
+        }],
+        ["NumberSetting", (element) => {
+            return element.querySelector(".value").value;
+        }],
+        ["StringSetting", (element) => {
+            return element.querySelector(".value").value;
+        }],
+        ["SingleValuesSetting", (element) => {
+            return element.querySelector("select").selectedOptions[0].value;
+        }]
+    ]);
+
+    function showSettingsModal() {
+        const modalElement = document.getElementById("settingsModal");
+        const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        const settingsElements = [];
+        for (const setting in settings) {
+            const callback = settingsTypes.get(settings[setting].constructor.name);
+            if (callback === undefined)
+                continue;
+            const element = callback(settings[setting]);
+            element.setAttribute("setting", setting);
+            settingsElements.push(element);
+        }
+        const body = modalElement.querySelector(".modal-body");
+        body.replaceChildren(...settingsElements);
+        document.getElementById("settingsModalSaveButton").addEventListener("click", () => {
+            for (const element of settingsElements) {
+                const setting = settings[element.getAttribute("setting")];
+                const value = settingsValues.get(setting.constructor.name)(element);
+                if (setting.isValueAllowed(value))
+                    setting.value = value;
+            }
+            settings.save();
+            modal.hide();
+        });
         modal.show();
     }
     //#endregion
@@ -383,21 +543,34 @@ import { Tab } from "../../scripts/Tab.js";
                 ["Tabs List", async (input) => {
                     await importAsTabsList(input.trim().split("\n"));
                 }],
+                ["Tabs JSON", async (input) => {
+                    await importAsTabsJSON(JSON.parse(input));
+                }],
                 ["Collections JSON", async (input) => {
                     await importAsCollectionsJSON(JSON.parse(input));
                 }]
             ]));
         });
-
         document.getElementById("exportButton").addEventListener("click", () => {
             showExportModal(new Map([
                 ["Tabs List", async () => {
                     document.getElementById("exportModalTextarea").value = await exportAsTabsList();
                 }],
+                ["Tabs JSON", async () => {
+                    document.getElementById("exportModalTextarea").value = await exportAsTabsJSON();
+                }],
                 ["Collections JSON", async () => {
                     document.getElementById("exportModalTextarea").value = await exportAsCollectionsJSON();
                 }]
             ]));
+        });
+        document.getElementById("settingsButton").addEventListener("click", () => {
+            showSettingsModal();
+        });
+        document.getElementById("settingsModalSetDefaultButton").addEventListener("click", () => {
+            for (const defaultButton of document.getElementById("settingsModal").querySelectorAll(".default-btn")) {
+                defaultButton.click();
+            }
         });
 
         document.getElementById("collections").addEventListener("collectionCreated", async (event) => {

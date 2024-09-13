@@ -29,7 +29,7 @@ export function createCallStack() {
 }
 
 export function isThenable(obj) {
-    return obj["then"] !== undefined;
+    return typeof obj !== "undefined" && typeof obj !== "null" && obj["then"] !== undefined;
 }
 
 export async function resizeImage(image, width, height) {

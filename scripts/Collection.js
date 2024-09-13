@@ -54,12 +54,23 @@ export class Collection {
         Collection.delete(this.id);
     }
 
+    // as* methods return a string representation of the collection in different formats
+
     asTabsList() {
-        const res = "";
+        let result = "";
         for (const tab of this.tabs) {
-            res += `${tab.url} | ${tab.title}\n`;
+            result += `${tab.url} | ${tab.title}\n`;
         }
-        return res;
+        return result;
+    }
+
+    asTabsJSON() {
+        return JSON.stringify(this.tabs, null, 2);
+    }
+
+    asJSON() {
+        // it's an array so that common import can handle it
+        return JSON.stringify([this], null, 2);
     }
 
     toJSON() {
@@ -86,13 +97,18 @@ export class Collection {
     }
 
     canAdd(tab) {
-        return this.allowDuplicates || !this.tabs.some((t) => t.url === tab.url);
+        if (!this.allowDuplicates && this.tabs.some((t) => t.url === tab.url))
+            return [false, `Tab ${tab.url} is already in ${this.title}`];
+        if (!this.filters.some((filter) => filter.test(tab.url)))
+            return [false, `Tab ${tab.url} doesn't match any of the ${this.title}'s filters`];
+        return [true];
     }
 
     async addTab(tab) {
         this.#requiresId();
-        if (!this.canAdd(tab)) {
-            log.info(`%cTab ${tab.url} is already in ${this.title}`, "color: #ffa500");
+        const [canAdd, reason] = this.canAdd(tab);
+        if (!canAdd) {
+            log.info(`%c${reason}`, "color: #ffa500");
             return;
         }
         tab.collectionId = this.id;
@@ -105,8 +121,9 @@ export class Collection {
         this.#requiresId();
         const tabsToAdd = [];
         for (const tab of tabs) {
-            if (!this.canAdd(tab)) {
-                log.info(`%cTab ${tab.url} is already in ${this.title}`, "color: #ffa500");
+            const [canAdd, reason] = this.canAdd(tab);
+            if (!canAdd) {
+                log.info(`%c${reason}`, "color: #ffa500");
                 continue;
             }
 
@@ -127,25 +144,21 @@ export class Collection {
     }
 
     populateFromTabsList(tabsStrings) {
-        // TODO: should this handle the addition of tabs?
-        this.#requiresId();
-        const tabsToAdd = [];
+        const tabs = [];
         for (const tabString of tabsStrings) {
             const [url, title] = tabString.split("|");
             const tab = new Tab(
-                this.id,
                 url.trim(),
-                title !== undefined ? title.trim() : ""
+                title !== undefined ? title.trim() : url.trim()
             );
-            if (!this.canAdd(tab)) {
-                log.info(`%cTab ${tab.url} is already in ${this.title}`, "color: #ffa500");
-                continue;
-            }
-            tabsToAdd.push(tab);
+            tabs.push(tab);
         }
-        Tab.bulkSave(tabsToAdd);
-        for (const tab of tabsToAdd)
-            log.info(`%cTab ${tab.url} added to ${this.title}`, "color: Lime");
+        this.addTabs(tabs);
+    }
+
+    populateFromTabsJSON(json) {
+        const tabs = json.map((tab) => Tab.fromJSON(tab));
+        this.addTabs(tabs);
     }
 
     getObservable() {

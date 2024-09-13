@@ -4,9 +4,9 @@ import { ArrayExtensions } from "../utility/extensions.js";
 import { createCallStack, isThenable } from "../utility/utility.js";
 import { log, settings } from "./globals.js";
 
-// while performanceEnabled should be taken from global settings, global settings may not have been initialized by the time when the function is called
-export function funcPerformance(func, funcName = func.name, thisArg = undefined, performanceEnabled = settings.performanceEnabled) {
-    if (!performanceEnabled)
+// while profilerEnabled should be taken from global settings, global settings may not have been initialized by the time when the function is called
+export function funcPerformance(func, funcName = func.name, thisArg = undefined, profilerEnabled = settings.profilerEnabled.value) {
+    if (!profilerEnabled)
         return func;
 
     function inner(...rest) {
@@ -27,9 +27,10 @@ export function funcPerformance(func, funcName = func.name, thisArg = undefined,
     return inner;
 }
 
-export function classPerformance(cls, performanceEnabled = settings.performanceEnabled) {
-    if (!performanceEnabled)
+export function classPerformance(cls, profilerEnabled = settings.profilerEnabled.value) {
+    if (!profilerEnabled)
         return;
+
     for (const propertyName of ArrayExtensions.deleteValues(Object.getOwnPropertyNames(cls), "prototype", "length", "name")) {
         if (!(typeof cls[propertyName] === "function"))
             continue;
@@ -37,21 +38,22 @@ export function classPerformance(cls, performanceEnabled = settings.performanceE
             cls[propertyName],
             `${cls.name}.${cls[propertyName].name}`,
             cls,
-            performanceEnabled
+            profilerEnabled
         );
     }
 }
 
-export function instancePerformance(instance, instanceName, performanceEnabled = settings.performanceEnabled) {
-    if (!performanceEnabled)
+export function instancePerformance(instance, instanceName, profilerEnabled = settings.profilerEnabled.value) {
+    if (!profilerEnabled)
         return;
+
     const proto = Object.getPrototypeOf(instance);
     for (const propertyName of ArrayExtensions.deleteValues(Object.getOwnPropertyNames(proto), "constructor")) {
         instance[propertyName] = funcPerformance(
             proto[propertyName],
             `${proto.constructor.name}(${instanceName}).${proto[propertyName].name}`,
             instance,
-            performanceEnabled
+            profilerEnabled
         );
     }
 }

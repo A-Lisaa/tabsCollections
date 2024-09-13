@@ -3,6 +3,7 @@
 import { Collection } from "./Collection.js";
 import { Favicon } from "./Favicon.js";
 import { Tab } from "./Tab.js";
+import { settings } from "./globals.js";
 
 async function sendTabs(selectedTabs) {
     const tabs = [];
@@ -16,7 +17,6 @@ async function sendTabs(selectedTabs) {
 }
 
 browser.runtime.onInstalled.addListener(async () => {
-    // TODO: force selected to...
     const menus = new Map([
         ["collectionsTabs", {
             title: "Collections Tabs",
@@ -92,11 +92,13 @@ browser.runtime.onInstalled.addListener(async () => {
     }
 
     browser.menus.onClicked.addListener((info) => {
-        Promise.resolve(menus.get(info.menuItemId).onclick());
+        menus.get(info.menuItemId).onclick();
     });
 });
 
 browser.action.onClicked.addListener(async () => {
     const selectedTabs = await browser.tabs.query({ highlighted: true, currentWindow: true });
     sendTabs(selectedTabs);
+    if (settings.closeWhenSendingViaAction)
+        browser.tabs.remove(selectedTabs.map((tab) => tab.id));
 });

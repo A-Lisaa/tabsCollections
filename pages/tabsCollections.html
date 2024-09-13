@@ -44,8 +44,8 @@
                                 A higher number means the collection will be chosen if there are multiple matches for a tab
                             </div>
                         </div>
-                        <div class="form-check mb-3">
-                            <input type="checkbox" class="form-check-input" id="collectionModalFormAllowDuplicates">
+                        <div class="form-check form-switch mb-3">
+                            <input type="checkbox" class="form-check-input" role="switch" id="collectionModalFormAllowDuplicates">
                             <label class="form-check-label" for="collectionModalFormAllowDuplicates">Allow duplicates</label>
                         </div>
                     </div>
@@ -105,63 +105,70 @@
         </div>
     </div>
 
-    <div id="checkboxSettingTemplate" class="mb-3">
-        <label for="collectionModalFormTitle" class="col-form-label"></label>
-        <input type="text" id="collectionModalFormTitle" class="form-control" maxlength="64" required>
+    <div id="switchSettingTemplate" class="d-flex form-check form-switch mb-3 d-none">
+        <div class="flex-fill">
+            <input type="checkbox" class="value form-check-input" role="switch">
+            <label class="name form-check-label"></label>
+            <div class="description form-text"></div>
+        </div>
+        <button type="button" class="default-btn btn btn-outline-warning ms-2">Set default value</button>
+    </div>
+    <div id="numberSettingTemplate" class="d-flex mb-3 d-none">
+        <div class="flex-fill">
+            <label class="name col-form-label"></label>
+            <input type="number" class="value form-control" required>
+            <div class="description form-text"></div>
+        </div>
+        <button type="button" class="default-btn btn btn-outline-warning ms-2">Set default value</button>
         <div class="invalid-feedback">
             Please choose a title
         </div>
     </div>
-    <div id="numberSettingTemplate" class="mb-3">
-        <label for="collectionModalFormTitle" class="col-form-label"></label>
-        <input type="text" id="collectionModalFormTitle" class="form-control" maxlength="64" required>
+    <div id="stringSettingTemplate" class="d-flex mb-3 d-none">
+        <div class="flex-fill">
+            <label class="name col-form-label"></label>
+            <input type="text" class="value form-control" required>
+            <div class="description form-text"></div>
+        </div>
+        <button type="button" class="default-btn btn btn-outline-warning ms-2">Set default value</button>
         <div class="invalid-feedback">
             Please choose a title
         </div>
     </div>
-    <div id="radioSettingTemplate" class="mb-3">
-        <label for="collectionModalFormTitle" class="col-form-label"></label>
-        <input type="text" id="collectionModalFormTitle" class="form-control" maxlength="64" required>
-        <div class="invalid-feedback">
-            Please choose a title
+    <div id="selectSettingTemplate" class="d-flex mb-3 d-none">
+        <div class="flex-fill">
+            <div class="name col-form-label"></div>
+            <select class="value form-select">
+                <option></option>
+            </select>
+            <div class="description form-text"></div>
         </div>
+        <button type="button" class="default-btn btn btn-outline-warning ms-2">Set default value</button>
     </div>
-    <div id="rangeSettingTemplate" class="mb-3">
-        <label for="collectionModalFormTitle" class="col-form-label"></label>
-        <input type="text" id="collectionModalFormTitle" class="form-control" maxlength="64" required>
-        <div class="invalid-feedback">
-            Please choose a title
+    <div id="checkboxesSettingTemplate" class="d-flex form-check mb-3 d-none">
+        <div class="flex-fill">
+            <div>
+                <input class="value form-check-input" type="checkbox">
+                <label class="name form-check-label"></label>
+            </div>
+            <div class="description form-text"></div>
         </div>
+        <button type="button" class="default-btn btn btn-outline-warning ms-2">Set default values</button>
     </div>
-    <div id="textSettingTemplate" class="mb-3">
-        <label for="collectionModalFormTitle" class="col-form-label"></label>
-        <input type="text" id="collectionModalFormTitle" class="form-control" maxlength="64" required>
-        <div class="invalid-feedback">
-            Please choose a title
-        </div>
-    </div>
-    <div id="selectSettingTemplate" class="mb-3">
-        <label for="collectionModalFormTitle" class="col-form-label"></label>
-        <input type="text" id="collectionModalFormTitle" class="form-control" maxlength="64" required>
-        <div class="invalid-feedback">
-            Please choose a title
-        </div>
-    </div>
-    <div id="settingsModal" class="modal fade" tabindex="-1" aria-hidden="true"></div>
+    <div id="settingsModal" class="modal fade" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
-                <form method="dialog" id="settingsModalForm" class="needs-validation" novalidate></form>
-                    <div class="modal-header">
-                        <h5 class="modal-title">Settings</h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
-                        <button class="btn btn-outline-info" type="submit">Save</button>
-                    </div>
-                </form>
+                <div class="modal-header">
+                    <h5 class="modal-title">Settings</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Close</button>
+                    <button id="settingsModalSetDefaultButton" type="button" class="btn btn-outline-warning">Set default values</button>
+                    <button id="settingsModalSaveButton" type="button" class="btn btn-outline-info">Save</button>
+                </div>
             </div>
         </div>
     </div>
@@ -177,6 +184,18 @@
                 aria-controls=""
             >
                 <span></span> | <span></span> tab(s) | Priority: <span></span>
+            </button>
+            <button
+                class="btn btn-outline-info rounded-0 ms-1"
+                type="button"
+            >
+                Import
+            </button>
+            <button
+                class="btn btn-outline-info rounded-0 ms-1"
+                type="button"
+            >
+                Export
             </button>
             <button
                 class="btn btn-outline-danger rounded-0 ms-1"

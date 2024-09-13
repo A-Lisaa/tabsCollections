@@ -77,7 +77,7 @@ export class Favicon {
             return new Favicon(hash);
 
         if (favicon.startsWith("data:image")) {
-            favicon = resizeImage(favicon);
+            favicon = resizeImage(favicon, 16, 16);
             favicon = await favicon.arrayBuffer();
         }
 
@@ -104,7 +104,7 @@ export class Favicon {
 
 
             if (favicon.startsWith("data:image")) {
-                favicon = await resizeImage(favicon);
+                favicon = await resizeImage(favicon, 16, 16);
                 favicon = await favicon.arrayBuffer();
             }
 
@@ -116,7 +116,7 @@ export class Favicon {
     }
 
     static async cleanup() {
-        // TODO: I don't think this works, very low priority though
+        // TODO: Low priority: I don't think this works
         return;
         const lastCleanup = new Date(JSON.parse(localStorage.getItem("lastFaviconsCleanup")));
         if (new Date() - lastCleanup < settings.faviconsCleanupFrequency)

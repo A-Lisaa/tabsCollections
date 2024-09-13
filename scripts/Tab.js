@@ -53,6 +53,7 @@ export class Tab {
         return {
             url: this.url,
             title: this.title,
+            faviconHash: this.favicon.hash,
             creationTime: this.creationTime.getTime(),
         }
     }
@@ -89,6 +90,11 @@ export class Tab {
         return highestPriorities;
     }
 
+    static async getAll() {
+        const tabsObjects = await db.tabs.toArray();
+        return tabsObjects.map((tabObject) => Tab.fromDBObject(tabObject));
+    }
+
     static async bulkSave(tabs) {
         const prepared = tabs.map((tab) => tab.toDBObject());
         const ids = await db.tabs.bulkAdd(prepared, undefined, { allKeys: true });
@@ -121,7 +127,7 @@ export class Tab {
         return new Tab(
             json.url,
             json.title,
-            new Favicon(undefined),
+            new Favicon(json.faviconHash),
             new Date(json.creationTime)
         );
     }

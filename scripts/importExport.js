@@ -2,7 +2,6 @@
 
 import { Collection } from "./Collection.js";
 import { Tab } from "./Tab.js";
-import { db } from "./globals.js";
 
 export async function importAsTabsList(tabsStrings) {
     const tabs = [];
@@ -14,6 +13,11 @@ export async function importAsTabsList(tabsStrings) {
         );
         tabs.push(tab);
     }
+    Collection.addTabs(tabs);
+}
+
+export async function importAsTabsJSON(json) {
+    const tabs = JSON.parse(json).map((tab) => Tab.fromJSON(tab));
     Collection.addTabs(tabs);
 }
 
@@ -33,18 +37,19 @@ export async function importAsCollectionsJSON(json) {
 
 export async function exportAsTabsList() {
     let result = "";
-    const tabs = await db.tabs.toArray();
+    const tabs = await Tab.getAll();
     for (const tab of tabs) {
         result += `${tab.url} | ${tab.title}\n`;
     }
     return result;
 }
 
+export async function exportAsTabsJSON() {
+    const tabs = await Tab.getAll();
+    return JSON.stringify(tabs, null, 2);
+}
+
 export async function exportAsCollectionsJSON() {
-    const result = [];
     const collections = await Collection.getAll();
-    for (const collection of collections) {
-        result.push(collection);
-    }
-    return JSON.stringify(result, null, 2);
+    return JSON.stringify(collections, null, 2);
 }

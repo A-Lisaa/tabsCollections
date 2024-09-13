@@ -24,7 +24,6 @@ export async function openDB() {
 }
 
 export const settings = new Settings();
-settings.logLevel = Logger.Levels.DEBUG;
 
 export const db = await openDB();
 
