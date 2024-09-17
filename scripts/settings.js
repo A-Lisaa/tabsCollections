@@ -1,15 +1,19 @@
 "use strict";
 
+import { Logger } from "../utility/Logger.js";
+import { log } from "./globals.js";
 
 export class Setting {
     #value;
-    constructor(name, description, defaultValue) {
+    // options = { onChange = (newValue, oldValue) => {} }
+    constructor(name, description, defaultValue, options = {}) {
         if (this.constructor === Setting)
             throw new Error("Setting is an abstract class");
         this.name = name;
         this.description = description;
         this.defaultValue = defaultValue;
-        this.#value = defaultValue;
+        this.onChange = options.onChange ?? ((newValue, oldValue) => {});
+        this.#value = this.defaultValue;
     }
 
     isValueAllowed(value) {
@@ -24,30 +28,35 @@ export class Setting {
         const [isValueAllowed, reason] = this.isValueAllowed(value);
         if (!isValueAllowed)
             throw new Error(reason);
+        const oldValue = this.#value;
         this.#value = value;
+        this.onChange(value, oldValue);
     }
 }
 
 export class BoolSetting extends Setting {
-    constructor(name, description, defaultValue) {
-        super(name, description, defaultValue);
+    // options = { onChange = (newValue, oldValue) => {} }
+    constructor(name, description, defaultValue, options = {}) {
+        super(name, description, defaultValue, options);
     }
 }
 
 export class StringSetting extends Setting {
-    constructor(name, description, defaultValue, minLength = 0, maxLength = 64, pattern = "") {
-        super(name, description, defaultValue);
-        this.minLength = minLength;
-        this.maxLength = maxLength;
-        this.pattern = pattern;
+    // options = { onChange = (newValue, oldValue) => {}, minLength = 0, maxLength = 64, pattern = "" }
+    constructor(name, description, defaultValue, options = {}) {
+        super(name, description, defaultValue, options);
+        this.minLength = options.minLength ?? 0;
+        this.maxLength = options.maxLength ?? 64;
+        this.pattern = options.pattern ?? "";
     }
 }
 
 export class NumberSetting extends Setting {
-    constructor(name, description, defaultValue, min = -Infinity, max = Infinity) {
-        super(name, description, defaultValue);
-        this.min = min;
-        this.max = max;
+    // options = { onChange = (newValue, oldValue) => {}, min = -Infinity, max = Infinity }
+    constructor(name, description, defaultValue, options = {}) {
+        super(name, description, defaultValue, options);
+        this.min = options.min ?? -Infinity;
+        this.max = options.max ?? Infinity;
     }
 
     isValueAllowed(value) {
@@ -62,8 +71,9 @@ export class NumberSetting extends Setting {
 }
 
 export class SingleValuesSetting extends Setting {
-    constructor(name, description, defaultValue, possibleValues) {
-        super(name, description, defaultValue);
+    // options = { onChange = (newValue, oldValue) => {} }
+    constructor(name, description, defaultValue, possibleValues, options = {}) {
+        super(name, description, defaultValue, options);
         this.possibleValues = possibleValues;
     }
 
@@ -85,11 +95,14 @@ export class Settings {
             "Log level",
             "Level at which the logger will work",
             "INFO",
-            ["DEBUG", "INFO", "WARN", "ERROR"]
+            ["DEBUG", "INFO", "WARN", "ERROR"],
+            {
+                onChange: (newValue) => log.level = Logger.Levels[newValue],
+            }
         ),
         profilerEnabled = new BoolSetting("Profiler enabled", "If true, profiling will be done in console at debug level", false),
         fetchUndefinedFavicons = new BoolSetting("Fetch undefined favicons", "If true, will try to fetch the undefined favicons", true),
-        faviconsCleanupFrequency = new NumberSetting("Favicons cleanup frequency", "Frequency in hours at which the favicons will be cleaned from redundant", 24, 1),
+        faviconsCleanupFrequency = new NumberSetting("Favicons cleanup frequency", "Frequency in hours at which the favicons will be cleaned from redundant", 24, { min: 1 }),
     ) {
         this.closeWhenSendingViaAction = closeWhenSendingViaAction;
         this.logLevel = logLevel;
@@ -100,9 +113,13 @@ export class Settings {
         if (load) {
             this.load();
         }
+        // just to be sure that it's synced
+        window.addEventListener("storage", () => {
+            this.load();
+        });
     }
 
-    async save() {
+    save() {
         const toSave = [];
         for (const key in this) {
             if (this[key] instanceof Setting)

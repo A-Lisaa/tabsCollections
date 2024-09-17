@@ -219,6 +219,12 @@ export class Collection {
             return;
 
         const collection = matches[0];
+        const [canAdd, reason] = collection.canAdd(tab);
+        if (!canAdd) {
+            log.info(`%c${reason}`, "color: #ffa500");
+            return;
+        }
+
         collection.addTab(tab);
     }
 
@@ -232,8 +238,9 @@ export class Collection {
                 continue;
 
             const collection = matches[0];
-            if (!collection.canAdd(tab)) {
-                log.info(`%cTab ${tab.url} is already in ${collection.title}`, "color: #ffa500");
+            const [canAdd, reason] = collection.canAdd(tab);
+            if (!canAdd) {
+                log.info(`%c${reason}`, "color: #ffa500");
                 continue;
             }
 

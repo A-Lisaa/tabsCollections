@@ -69,10 +69,20 @@ import { RandomExtensions } from "../../utility/extensions.js";
     }
 
     function setCollectionHeader(collection, collectionHeader) {
-        const [collapseButton, importButton, exportButton, deleteButton, clearButton, editButton] = collectionHeader.children;
+        const [collapseButton, openAllButton, importButton, exportButton, deleteButton, clearButton, editButton] = collectionHeader.children;
 
         collapseButton.setAttribute("data-bs-target", `#collection-${collection.id}-subelements`);
         collapseButton.setAttribute("aria-controls", `collection-${collection.id}-subelements`);
+
+        openAllButton.addEventListener("click", async (event) => {
+            const collectionId = getIdFromCollectionElement(event.target.parentNode.parentNode);
+            const collection = await Collection.get(collectionId);
+            for (const tab of collection.tabs) {
+                browser.tabs.create({
+                    url: tab.url,
+                });
+            }
+        });
 
         importButton.addEventListener("click", async (event) => {
             const collectionId = getIdFromCollectionElement(event.target.parentNode.parentNode);
@@ -496,6 +506,7 @@ import { RandomExtensions } from "../../utility/extensions.js";
     function showSettingsModal() {
         const modalElement = document.getElementById("settingsModal");
         const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+        const body = modalElement.querySelector(".modal-body");
         const settingsElements = [];
         for (const setting in settings) {
             const callback = settingsTypes.get(settings[setting].constructor.name);
@@ -505,18 +516,7 @@ import { RandomExtensions } from "../../utility/extensions.js";
             element.setAttribute("setting", setting);
             settingsElements.push(element);
         }
-        const body = modalElement.querySelector(".modal-body");
         body.replaceChildren(...settingsElements);
-        document.getElementById("settingsModalSaveButton").addEventListener("click", () => {
-            for (const element of settingsElements) {
-                const setting = settings[element.getAttribute("setting")];
-                const value = settingsValues.get(setting.constructor.name)(element);
-                if (setting.isValueAllowed(value))
-                    setting.value = value;
-            }
-            settings.save();
-            modal.hide();
-        });
         modal.show();
     }
     //#endregion
@@ -571,6 +571,19 @@ import { RandomExtensions } from "../../utility/extensions.js";
             for (const defaultButton of document.getElementById("settingsModal").querySelectorAll(".default-btn")) {
                 defaultButton.click();
             }
+        });
+        document.getElementById("settingsModalSaveButton").addEventListener("click", () => {
+            const modalElement = document.getElementById("settingsModal");
+            const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+            const body = modalElement.querySelector(".modal-body");
+            for (const element of body.children) {
+                const setting = settings[element.getAttribute("setting")];
+                const value = settingsValues.get(setting.constructor.name)(element);
+                if (setting.isValueAllowed(value))
+                    setting.value = value;
+            }
+            settings.save();
+            modal.hide();
         });
 
         document.getElementById("collections").addEventListener("collectionCreated", async (event) => {

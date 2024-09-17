@@ -99,6 +99,6 @@ browser.runtime.onInstalled.addListener(async () => {
 browser.action.onClicked.addListener(async () => {
     const selectedTabs = await browser.tabs.query({ highlighted: true, currentWindow: true });
     sendTabs(selectedTabs);
-    if (settings.closeWhenSendingViaAction)
+    if (settings.closeWhenSendingViaAction.value)
         browser.tabs.remove(selectedTabs.map((tab) => tab.id));
 });

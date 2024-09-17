@@ -23,8 +23,8 @@ export async function openDB() {
     return db;
 }
 
+export const log = new Logger();
+
 export const settings = new Settings();
 
 export const db = await openDB();
-
-export const log = new Logger(settings.logLevel);
